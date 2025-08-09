@@ -278,6 +278,16 @@ func (spec IdentityCollectorTaskSpec) getEtcdMemberID(ctx context.Context, clien
 		return 0, err
 	}
 
+	res, err := etcdClient.Get(ctx, "/omni", clientv3.WithPrefix())
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := res.Marshal()
+	if err != nil {
+		return nil, err
+	}
+
 	defer etcdClient.Close() //nolint:errcheck
 
 	members, err := etcdClient.MemberList(ctx)
