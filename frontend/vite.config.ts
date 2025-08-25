@@ -24,8 +24,10 @@ export default defineConfig(({ command }) => {
       },
     },
     test: {
+      setupFiles: ['vitest.setup.ts'],
       environment: 'jsdom',
       root: fileURLToPath(new URL('./', import.meta.url)),
+      include: ['src/**/*.spec.*'],
     },
     server: {
       port: 8121,
