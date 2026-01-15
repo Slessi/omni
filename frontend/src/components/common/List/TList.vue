@@ -6,17 +6,15 @@ included in the LICENSE file.
 -->
 <script setup lang="ts">
 import { useLocalStorage } from '@vueuse/core'
-import type { Ref } from 'vue'
-import { computed, ref, toRefs, watch as vueWatch } from 'vue'
+import { computed, ref, toRefs, toValue, watch as vueWatch } from 'vue'
 
-import type { Resource } from '@/api/grpc'
-import type { WatchJoinOptions, WatchOptions } from '@/api/watch'
-import Watch, { WatchJoin } from '@/api/watch'
+import type { WatchJoinOptions, WatchOptions, WatchOptionsMulti } from '@/api/watch'
 import TIcon from '@/components/common/Icon/TIcon.vue'
 import TSelectList from '@/components/common/SelectList/TSelectList.vue'
 import TSpinner from '@/components/common/Spinner/TSpinner.vue'
 import TInput from '@/components/common/TInput/TInput.vue'
 import TAlert from '@/components/TAlert.vue'
+import { useResourceWatch } from '@/methods/useResourceWatch'
 
 defineExpose({
   addFilterLabel: (label: { key: string; value?: string }) => {
@@ -34,7 +32,7 @@ const dots = '...'
 const props = defineProps<{
   pagination?: boolean
   search?: boolean
-  opts?: WatchOptions | WatchJoinOptions[] | object
+  opts?: WatchOptionsMulti | WatchJoinOptions[]
   sortOptions?: { id: string; desc: string; descending?: boolean }[]
   filterOptions?: { query?: string; desc: string }[]
   filterValue?: string
@@ -64,10 +62,6 @@ const filterOptionsVariants = computed(() => {
 })
 
 const { opts, filterValue } = toRefs(props)
-
-const items: Ref<Resource[]> = ref([])
-
-const optsList = props.opts as WatchJoinOptions[]
 
 const filterValueInternal = ref('')
 const currentPage = ref(1)
@@ -186,57 +180,6 @@ const searchQuery = computed(() => {
   return searchState.value.searchFor.join(' ')
 })
 
-const setupWatch = () => {
-  const w = new Watch(items)
-
-  w.setup(
-    computed(() => {
-      if (!opts?.value) {
-        return
-      }
-
-      return {
-        ...paginationState.value,
-        ...(opts.value as WatchOptions),
-        ...searchState.value,
-        ...sortByState.value,
-      }
-    }),
-  )
-
-  return w
-}
-
-const setupJoinWatch = () => {
-  const w = new WatchJoin(items)
-
-  w.setup(
-    computed(() => {
-      if (!opts?.value) {
-        return
-      }
-
-      return {
-        ...paginationState.value,
-        ...(opts.value as WatchJoinOptions[])[0],
-        ...searchState.value,
-        ...sortByState.value,
-      }
-    }),
-    computed(() => {
-      if (!opts?.value) {
-        return
-      }
-
-      const o = opts.value as WatchJoinOptions[]
-
-      return o.slice(1, o.length)
-    }),
-  )
-
-  return w
-}
-
 const paginationRange = computed(() => {
   let ranges: number[][]
   if (totalPageCount.value < 20) {
@@ -270,13 +213,36 @@ const paginationRange = computed(() => {
   return res
 })
 
-const watch = optsList?.length ? setupJoinWatch() : setupWatch()
-const err = watch.err
-const loading = watch.loading
-const itemsCount = watch.total
+const watchOpts = toValue(opts)
+
+const {
+  data: items,
+  err,
+  loading,
+  total: itemsCount,
+} = !Array.isArray(watchOpts)
+  ? useResourceWatch<any, any>(() => ({
+      skip: !watchOpts,
+      ...paginationState.value,
+      ...watchOpts!,
+      ...searchState.value,
+      ...sortByState.value,
+    }))
+  : useResourceWatch<any, any>(() =>
+      watchOpts.map((o, i) =>
+        i === 0
+          ? {
+              ...paginationState.value,
+              ...o,
+              ...searchState.value,
+              ...sortByState.value,
+            }
+          : o,
+      ),
+    )
 
 const totalPageCount = computed(() => {
-  return Math.ceil(watch.total.value / selectedItemsPerPage.value)
+  return Math.ceil(itemsCount.value / selectedItemsPerPage.value)
 })
 
 const showPageSelector = computed(() => {
@@ -379,7 +345,6 @@ const openPage = (page: number | string) => {
           <div v-show="!loading && !err && items.length > 0" class="size-full">
             <slot
               :items="items"
-              :watch="watch"
               :search-query="searchQuery"
               :side-panel-open
               :side-panel-selected-item-id
