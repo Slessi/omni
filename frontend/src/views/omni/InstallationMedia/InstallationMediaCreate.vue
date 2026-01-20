@@ -58,13 +58,18 @@ export interface FormState {
 
 <script setup lang="ts">
 import { useSessionStorage } from '@vueuse/core'
-import { computed, ref, watchEffect } from 'vue'
+import { computed, ref, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import TButton from '@/components/common/Button/TButton.vue'
 import Stepper from '@/components/common/Stepper/Stepper.vue'
 import { showSuccess } from '@/notification'
 import SavePresetModal from '@/views/omni/InstallationMedia/SavePresetModal.vue'
+import {
+  areIntermediateStepsValid,
+  findFirstInvalidStep,
+  getStepValidation,
+} from '@/views/omni/InstallationMedia/stepConfig'
 
 const router = useRouter()
 const route = useRoute()
@@ -102,16 +107,64 @@ const isLastStep = computed(() =>
   currentFlowSteps.value ? currentStep.value === stepCount.value : false,
 )
 
-const nextStep = computed(() =>
-  !isLastStep.value ? currentFlowSteps.value?.[currentStep.value] : undefined,
-)
+// Validate current step
+const currentStepValidation = computed(() => {
+  const currentStepName = route.name?.toString()
+  if (!currentStepName) return { isValid: false, shouldSkip: false }
+
+  return getStepValidation(currentStepName, formState.value)
+})
+
+// Check if user can navigate to a given step (all intermediate steps are valid)
+function canNavigateToStep(stepIndex: number): boolean {
+  if (!currentFlowSteps.value) return false
+  return areIntermediateStepsValid(currentFlowSteps.value, stepIndex, formState.value)
+}
+
+// Find next valid step (or current if invalid)
+const nextStep = computed(() => {
+  if (isLastStep.value || !currentFlowSteps.value) return undefined
+
+  // Current step must be valid to proceed
+  if (!currentStepValidation.value.isValid) return undefined
+
+  return currentFlowSteps.value[currentStep.value]
+})
+
+// Disable Next button if current step is invalid
+const canProceed = computed(() => {
+  return currentStepValidation.value.isValid && !!nextStep.value
+})
 
 function onStepperChange(stepperValue?: number) {
   if (!currentFlowSteps.value || !stepperValue) return
 
+  // Check if user can navigate to this step (all previous steps valid)
+  if (!canNavigateToStep(stepperValue - 1)) {
+    // Find first invalid step and navigate there instead
+    const firstInvalidIndex = findFirstInvalidStep(currentFlowSteps.value, formState.value)
+    if (firstInvalidIndex >= 0) {
+      router.push({ name: currentFlowSteps.value[firstInvalidIndex] })
+      return
+    }
+  }
+
   // Stepper is not 0 indexed
   router.push({ name: currentFlowSteps.value[stepperValue - 1] })
 }
+
+// Watch for changes to dependencies and redirect to first invalid step if necessary
+watch(
+  () => formState.value.hardwareType,
+  () => {
+    if (currentFlowSteps.value && currentStep.value > 1) {
+      const firstInvalidIndex = findFirstInvalidStep(currentFlowSteps.value, formState.value)
+      if (firstInvalidIndex >= 0 && firstInvalidIndex < currentStep.value - 1) {
+        router.replace({ name: currentFlowSteps.value[firstInvalidIndex] })
+      }
+    }
+  },
+)
 
 const savePresetModalOpen = ref(false)
 
@@ -165,7 +218,7 @@ function onSaved(name: string) {
           is="router-link"
           v-if="!isLastStep"
           type="highlighted"
-          :disabled="!nextStep"
+          :disabled="!canProceed"
           :to="{ name: nextStep }"
         >
           Next
