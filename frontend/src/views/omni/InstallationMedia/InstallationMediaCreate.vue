@@ -161,8 +161,10 @@ watch(
     if (newValue !== oldValue && currentFlowSteps.value) {
       // Reset all dependent steps when hardware type changes
       resetDependentSteps('hardwareType', formState.value, currentFlowSteps.value)
-      
+
       // Redirect to first invalid step if necessary
+      // Only redirect if the invalid step is before the current step
+      // This prevents unnecessary navigation when user is already on an earlier step
       const firstInvalidIndex = findFirstInvalidStep(currentFlowSteps.value, formState.value)
       if (firstInvalidIndex >= 0 && firstInvalidIndex < currentStep.value - 1) {
         router.replace({ name: currentFlowSteps.value[firstInvalidIndex] })

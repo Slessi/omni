@@ -24,6 +24,9 @@ export function useWizardStep(
 ) {
   const router = useRouter()
 
+  // Delay before auto-navigating to allow state updates to propagate
+  const AUTO_SKIP_NAVIGATION_DELAY_MS = 100
+
   // Validate current step with available options
   const validation = computed(() => {
     return getStepValidation(stepName, formState.value)
@@ -39,7 +42,7 @@ export function useWizardStep(
       // Small delay to allow the auto-selection to propagate
       setTimeout(() => {
         router.push({ name: nextStepName })
-      }, 100)
+      }, AUTO_SKIP_NAVIGATION_DELAY_MS)
     }
   }
 

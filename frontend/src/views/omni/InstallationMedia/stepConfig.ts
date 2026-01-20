@@ -61,6 +61,10 @@ export function validateTalosVersion(formState: FormState): StepValidationResult
  * Validates the CloudProvider step
  * @param formState Current form state
  * @param availableProviders Optional array of available provider IDs for auto-skip logic
+ * 
+ * Note: This function intentionally mutates formState to auto-select the provider
+ * when only one option is available. This is the desired behavior for the wizard
+ * to automatically skip single-option steps.
  */
 export function validateCloudProvider(
   formState: FormState,
@@ -86,6 +90,10 @@ export function validateCloudProvider(
  * Validates the SBCType step
  * @param formState Current form state
  * @param availableSBCs Optional array of available SBC type IDs for auto-skip logic
+ * 
+ * Note: This function intentionally mutates formState to auto-select the SBC type
+ * when only one option is available. This is the desired behavior for the wizard
+ * to automatically skip single-option steps.
  */
 export function validateSBCType(
   formState: FormState,
@@ -111,6 +119,10 @@ export function validateSBCType(
  * Validates the MachineArch step
  * @param formState Current form state
  * @param availableArchitectures Optional array of available architectures for auto-skip logic
+ * 
+ * Note: This function intentionally mutates formState to auto-select the architecture
+ * when only one option is available. This is the desired behavior for the wizard
+ * to automatically skip single-option steps.
  */
 export function validateMachineArch(
   formState: FormState,
@@ -269,6 +281,9 @@ export function resetDependentSteps(
 
 /**
  * Reset form state fields for a specific step
+ * 
+ * Note: This uses a switch statement for simplicity. For a larger number of steps,
+ * consider moving reset logic to the StepConfig object with a resetFields property.
  */
 function resetStepFields(stepName: string, formState: FormState): void {
   switch (stepName) {
