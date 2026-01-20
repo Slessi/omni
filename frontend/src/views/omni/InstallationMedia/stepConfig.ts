@@ -59,37 +59,76 @@ export function validateTalosVersion(formState: FormState): StepValidationResult
 
 /**
  * Validates the CloudProvider step
+ * @param formState Current form state
+ * @param availableProviders Optional array of available provider IDs for auto-skip logic
  */
-export function validateCloudProvider(formState: FormState): StepValidationResult {
+export function validateCloudProvider(
+  formState: FormState,
+  availableProviders?: string[],
+): StepValidationResult {
   const isValid = !!formState.cloudPlatform
+  const shouldSkip = availableProviders !== undefined && availableProviders.length === 1
+
+  // Auto-select if only one option available
+  if (shouldSkip && !formState.cloudPlatform && availableProviders.length === 1) {
+    formState.cloudPlatform = availableProviders[0]
+  }
+
   return {
-    isValid,
-    shouldSkip: false,
-    errorMessage: isValid ? undefined : 'Cloud platform is required',
+    isValid: isValid || shouldSkip,
+    shouldSkip,
+    errorMessage: isValid || shouldSkip ? undefined : 'Cloud platform is required',
+    availableOptions: availableProviders?.length,
   }
 }
 
 /**
  * Validates the SBCType step
+ * @param formState Current form state
+ * @param availableSBCs Optional array of available SBC type IDs for auto-skip logic
  */
-export function validateSBCType(formState: FormState): StepValidationResult {
+export function validateSBCType(
+  formState: FormState,
+  availableSBCs?: string[],
+): StepValidationResult {
   const isValid = !!formState.sbcType
+  const shouldSkip = availableSBCs !== undefined && availableSBCs.length === 1
+
+  // Auto-select if only one option available
+  if (shouldSkip && !formState.sbcType && availableSBCs.length === 1) {
+    formState.sbcType = availableSBCs[0]
+  }
+
   return {
-    isValid,
-    shouldSkip: false,
-    errorMessage: isValid ? undefined : 'SBC type is required',
+    isValid: isValid || shouldSkip,
+    shouldSkip,
+    errorMessage: isValid || shouldSkip ? undefined : 'SBC type is required',
+    availableOptions: availableSBCs?.length,
   }
 }
 
 /**
  * Validates the MachineArch step
+ * @param formState Current form state
+ * @param availableArchitectures Optional array of available architectures for auto-skip logic
  */
-export function validateMachineArch(formState: FormState): StepValidationResult {
+export function validateMachineArch(
+  formState: FormState,
+  availableArchitectures?: number[],
+): StepValidationResult {
   const isValid = !!formState.machineArch
+  const shouldSkip = availableArchitectures !== undefined && availableArchitectures.length === 1
+
+  // Auto-select if only one option available
+  if (shouldSkip && !formState.machineArch && availableArchitectures.length === 1) {
+    formState.machineArch = availableArchitectures[0]
+  }
+
   return {
-    isValid,
-    shouldSkip: false,
-    errorMessage: isValid ? undefined : 'Machine architecture is required',
+    isValid: isValid || shouldSkip,
+    shouldSkip,
+    errorMessage: isValid || shouldSkip ? undefined : 'Machine architecture is required',
+    availableOptions: availableArchitectures?.length,
   }
 }
 
