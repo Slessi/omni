@@ -5,26 +5,11 @@ Use of this software is governed by the Business Source License
 included in the LICENSE file.
 -->
 <script lang="ts">
-import { type Component } from 'vue'
-
 import type { SchematicBootloader } from '@/api/omni/management/management.pb'
 import { PlatformConfigSpecArch } from '@/api/omni/specs/virtual.pb'
 import type { LabelSelectItem } from '@/components/common/Labels/Labels.vue'
 
-type HardwareType = 'metal' | 'cloud' | 'sbc'
-
-const flows: Record<HardwareType, Component[]> = {
-  metal: [TalosVersionStep, MachineArchStep, SystemExtensionsStep, ExtraArgsStep, ConfirmationStep],
-  cloud: [
-    TalosVersionStep,
-    CloudProviderStep,
-    MachineArchStep,
-    SystemExtensionsStep,
-    ExtraArgsStep,
-    ConfirmationStep,
-  ],
-  sbc: [TalosVersionStep, SBCTypeStep, SystemExtensionsStep, ExtraArgsStep, ConfirmationStep],
-}
+export type HardwareType = 'metal' | 'cloud' | 'sbc'
 
 export interface FormState {
   currentStep: number
@@ -53,14 +38,9 @@ import TButton from '@/components/common/Button/TButton.vue'
 import Stepper from '@/components/common/Stepper/Stepper.vue'
 import { showSuccess } from '@/notification'
 import SavePresetModal from '@/views/omni/InstallationMedia/SavePresetModal.vue'
-import CloudProviderStep from '@/views/omni/InstallationMedia/Steps/CloudProvider.vue'
-import ConfirmationStep from '@/views/omni/InstallationMedia/Steps/Confirmation.vue'
 import EntryStep from '@/views/omni/InstallationMedia/Steps/Entry.vue'
-import ExtraArgsStep from '@/views/omni/InstallationMedia/Steps/ExtraArgs.vue'
-import MachineArchStep from '@/views/omni/InstallationMedia/Steps/MachineArch.vue'
-import SBCTypeStep from '@/views/omni/InstallationMedia/Steps/SBCType.vue'
-import SystemExtensionsStep from '@/views/omni/InstallationMedia/Steps/SystemExtensions.vue'
-import TalosVersionStep from '@/views/omni/InstallationMedia/Steps/TalosVersion.vue'
+import { getStepsForHardwareType } from '@/views/omni/InstallationMedia/stepConfigurations'
+import { useWizardSteps } from '@/views/omni/InstallationMedia/useWizardSteps'
 
 const router = useRouter()
 
@@ -70,26 +50,132 @@ const formState = useSessionStorage<FormState>(
   { writeDefaults: false },
 )
 
-const currentFlowSteps = computed(() =>
-  formState.value.hardwareType ? flows[formState.value.hardwareType] : null,
-)
-const currentStepComponent = computed(() =>
-  currentFlowSteps.value && formState.value.currentStep
-    ? currentFlowSteps.value[formState.value.currentStep - 1]
-    : EntryStep,
-)
+// Get current flow steps based on hardware type
+const currentFlowSteps = computed(() => getStepsForHardwareType(formState.value.hardwareType))
 
-const stepCount = computed(() => currentFlowSteps.value?.length ?? 0)
-const isLastStep = computed(
-  () => currentFlowSteps.value && formState.value.currentStep === stepCount.value,
-)
+// Calculate the actual step index (0-based index into the steps array)
+const actualStepIndex = computed({
+  get: () => Math.max(0, formState.value.currentStep - 1),
+  set: (value) => {
+    formState.value.currentStep = value + 1
+  },
+})
 
+// Use the wizard steps composable
+const {
+  isCurrentStepValid,
+  isStepAccessible,
+  goToNextStep: navigateToNextStep,
+  goToPreviousStep: navigateToPreviousStep,
+  tryNavigateToStep,
+  totalVisibleSteps,
+  getVisibleStepNumber,
+  getNextVisibleStep,
+} = useWizardSteps(currentFlowSteps, formState, actualStepIndex)
+
+// Current step component
+const currentStepComponent = computed(() => {
+  if (!formState.value.hardwareType || formState.value.currentStep === 0) {
+    return EntryStep
+  }
+  
+  const steps = currentFlowSteps.value
+  const index = actualStepIndex.value
+  
+  if (index >= 0 && index < steps.length) {
+    return steps[index].component
+  }
+  
+  return EntryStep
+})
+
+// Check if we're at the last step
+const isLastStep = computed(() => {
+  if (!formState.value.hardwareType || formState.value.currentStep === 0) {
+    return false
+  }
+  
+  // Find the last non-skipped step
+  const steps = currentFlowSteps.value
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const step = steps[i]
+    if (!step.shouldSkip || !step.shouldSkip(formState.value)) {
+      return actualStepIndex.value === i
+    }
+  }
+  
+  return false
+})
+
+// Count of total steps (for display)
+const stepCount = computed(() => totalVisibleSteps.value)
+
+// Can go back
+const canGoBack = computed(() => {
+  if (formState.value.currentStep <= 0) {
+    return false
+  }
+  
+  // Find previous non-skipped step
+  const prevIndex = getNextVisibleStep(actualStepIndex.value - 1, -1)
+  return prevIndex >= 0
+})
+
+// Can go forward (current step is valid)
+const canGoNext = computed(() => {
+  if (formState.value.currentStep === 0) {
+    // Entry step - can proceed if hardware type is selected
+    return !!formState.value.hardwareType
+  }
+  
+  return isCurrentStepValid.value
+})
+
+// Handle back button
 function goBackStep() {
-  formState.value.currentStep = Math.max(0, formState.value.currentStep - 1)
+  if (formState.value.currentStep === 0) {
+    return
+  }
+  
+  if (formState.value.hardwareType && formState.value.currentStep > 0) {
+    navigateToPreviousStep()
+  } else {
+    // Go back to entry step
+    formState.value.currentStep = 0
+  }
 }
 
+// Handle next button
 function goNextStep() {
-  formState.value.currentStep = Math.min(stepCount.value, formState.value.currentStep + 1)
+  if (formState.value.currentStep === 0) {
+    // Moving from entry to first actual step
+    if (formState.value.hardwareType) {
+      formState.value.currentStep = 1
+      
+      // Apply defaults for the first step
+      const steps = currentFlowSteps.value
+      if (steps.length > 0) {
+        const firstStep = getNextVisibleStep(0, 1)
+        if (firstStep >= 0 && steps[firstStep].applyDefaults) {
+          steps[firstStep].applyDefaults(formState.value)
+        }
+      }
+    }
+  } else {
+    navigateToNextStep()
+  }
+}
+
+// Handle clicking on a step in the stepper
+function onStepClick(stepNumber: number) {
+  if (stepNumber === formState.value.currentStep) {
+    return // Already on this step
+  }
+  
+  const targetIndex = stepNumber - 1
+  
+  // Try to navigate to the step
+  tryNavigateToStep(targetIndex)
 }
 
 const savePresetModalOpen = ref(false)
@@ -124,16 +210,18 @@ function onSaved(name: string) {
       class="flex w-full shrink-0 items-center gap-4 border-t border-naturals-n4 bg-naturals-n1 px-4 max-md:flex-col max-md:p-4 md:h-16 md:justify-end"
     >
       <Stepper
-        v-if="currentFlowSteps && formState.currentStep > 0"
+        v-if="currentFlowSteps.length > 0 && formState.currentStep > 0"
         v-model="formState.currentStep"
         :step-count="stepCount"
+        :is-step-accessible="(step: number) => isStepAccessible(step - 1)"
         class="mx-auto w-full"
+        @update:model-value="onStepClick"
       />
 
       <div class="flex items-center gap-2 max-md:self-end">
         <TButton
-          v-if="currentFlowSteps && formState.currentStep > 0"
-          :disabled="formState.currentStep <= 0 || isSaved"
+          v-if="formState.currentStep > 0"
+          :disabled="!canGoBack || isSaved"
           @click="goBackStep"
         >
           Back
@@ -141,6 +229,7 @@ function onSaved(name: string) {
 
         <TButton
           type="highlighted"
+          :disabled="!canGoNext && formState.currentStep > 0"
           @click="isLastStep ? (isSaved ? goToPresetList() : openSavePresetModal()) : goNextStep()"
         >
           {{ isLastStep ? (isSaved ? 'Finished' : 'Save') : 'Next' }}

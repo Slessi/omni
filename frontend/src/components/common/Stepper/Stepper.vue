@@ -17,16 +17,30 @@ import { computed } from 'vue'
 
 interface Props extends StepperRootProps {
   stepCount: number
+  isStepAccessible?: (step: number) => boolean
 }
 
-const { stepCount } = defineProps<Props>()
+const props = defineProps<Props>()
 const model = defineModel<number>()
 
 const steps = computed(() =>
-  Array(stepCount)
+  Array(props.stepCount)
     .fill(null)
     .map((_, i) => i + 1),
 )
+
+const emit = defineEmits<{
+  'update:model-value': [value: number]
+}>()
+
+function handleStepClick(step: number) {
+  // Check if step is accessible before allowing navigation
+  if (props.isStepAccessible && !props.isStepAccessible(step)) {
+    return
+  }
+  
+  emit('update:model-value', step)
+}
 </script>
 
 <template>
@@ -39,6 +53,11 @@ const steps = computed(() =>
 
       <StepperTrigger
         class="size-6 shrink-0 items-center justify-center rounded-sm border-2 border-primary-p4 bg-primary-p4 text-xs text-naturals-n14 shadow-sm group-data-disabled:cursor-not-allowed group-data-disabled:opacity-50 group-data-[state=inactive]:border-naturals-n6 group-data-[state=inactive]:bg-transparent group-data-[state=inactive]:text-naturals-n6"
+        :class="{
+          'cursor-pointer hover:opacity-80': isStepAccessible ? isStepAccessible(step) : true,
+          'cursor-not-allowed opacity-50': isStepAccessible && !isStepAccessible(step),
+        }"
+        @click="handleStepClick(step)"
       >
         <StepperIndicator>{{ step }}</StepperIndicator>
       </StepperTrigger>
