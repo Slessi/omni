@@ -17,6 +17,7 @@ import {
   resetCloudPlatformIfIncompatible,
   shouldSkipArchitectureStep,
 } from './stepHelpers'
+import type { HardwareType } from './types'
 import type { StepConfig } from './useWizardSteps'
 
 /**
@@ -149,7 +150,7 @@ export const sbcFlowSteps: StepConfig[] = [
   },
 ]
 
-export type HardwareType = 'metal' | 'cloud' | 'sbc'
+export type { HardwareType }
 
 /**
  * Get step configurations for a given hardware type

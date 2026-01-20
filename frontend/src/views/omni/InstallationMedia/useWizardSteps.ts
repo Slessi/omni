@@ -181,21 +181,25 @@ export function useWizardSteps(
   })
 
   /**
-   * Watch for changes in form state that might affect step validity
+   * Watch for changes in key form state properties that might affect step validity
    * and reset dependent steps if needed
    */
   watch(
-    () => formState.value,
-    (newState, oldState) => {
+    [
+      () => formState.value.hardwareType,
+      () => formState.value.talosVersion,
+      () => formState.value.cloudPlatform,
+      () => formState.value.sbcType,
+    ],
+    () => {
       // Call onDependencyChange for all steps after the current one
       for (let i = currentStepIndex.value + 1; i < steps.value.length; i++) {
         const step = steps.value[i]
         if (step.onDependencyChange) {
-          step.onDependencyChange(newState)
+          step.onDependencyChange(formState.value)
         }
       }
     },
-    { deep: true },
   )
 
   return {

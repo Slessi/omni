@@ -9,7 +9,7 @@ import type { SchematicBootloader } from '@/api/omni/management/management.pb'
 import { PlatformConfigSpecArch } from '@/api/omni/specs/virtual.pb'
 import type { LabelSelectItem } from '@/components/common/Labels/Labels.vue'
 
-export type HardwareType = 'metal' | 'cloud' | 'sbc'
+import type { HardwareType } from './types'
 
 export interface FormState {
   currentStep: number
@@ -167,6 +167,10 @@ function goNextStep() {
 }
 
 // Handle clicking on a step in the stepper
+const handleStepAccessibility = (step: number): boolean => {
+  return isStepAccessible(step - 1)
+}
+
 function onStepClick(stepNumber: number) {
   if (stepNumber === formState.value.currentStep) {
     return // Already on this step
@@ -213,7 +217,7 @@ function onSaved(name: string) {
         v-if="currentFlowSteps.length > 0 && formState.currentStep > 0"
         v-model="formState.currentStep"
         :step-count="stepCount"
-        :is-step-accessible="(step: number) => isStepAccessible(step - 1)"
+        :is-step-accessible="handleStepAccessibility"
         class="mx-auto w-full"
         @update:model-value="onStepClick"
       />
