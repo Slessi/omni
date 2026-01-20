@@ -69,6 +69,7 @@ import {
   areIntermediateStepsValid,
   findFirstInvalidStep,
   getStepValidation,
+  resetDependentSteps,
 } from '@/views/omni/InstallationMedia/stepConfig'
 
 const router = useRouter()
@@ -153,15 +154,49 @@ function onStepperChange(stepperValue?: number) {
   router.push({ name: currentFlowSteps.value[stepperValue - 1] })
 }
 
-// Watch for changes to dependencies and redirect to first invalid step if necessary
+// Watch for changes to dependencies and reset dependent steps
 watch(
   () => formState.value.hardwareType,
-  () => {
-    if (currentFlowSteps.value && currentStep.value > 1) {
+  (newValue, oldValue) => {
+    if (newValue !== oldValue && currentFlowSteps.value) {
+      // Reset all dependent steps when hardware type changes
+      resetDependentSteps('hardwareType', formState.value, currentFlowSteps.value)
+      
+      // Redirect to first invalid step if necessary
       const firstInvalidIndex = findFirstInvalidStep(currentFlowSteps.value, formState.value)
       if (firstInvalidIndex >= 0 && firstInvalidIndex < currentStep.value - 1) {
         router.replace({ name: currentFlowSteps.value[firstInvalidIndex] })
       }
+    }
+  },
+)
+
+// Watch for talosVersion changes to reset dependent steps
+watch(
+  () => formState.value.talosVersion,
+  (newValue, oldValue) => {
+    if (newValue !== oldValue && currentFlowSteps.value) {
+      resetDependentSteps('talosVersion', formState.value, currentFlowSteps.value)
+    }
+  },
+)
+
+// Watch for cloud platform changes to reset machine arch
+watch(
+  () => formState.value.cloudPlatform,
+  (newValue, oldValue) => {
+    if (newValue !== oldValue && currentFlowSteps.value) {
+      resetDependentSteps('cloudPlatform', formState.value, currentFlowSteps.value)
+    }
+  },
+)
+
+// Watch for SBC type changes to reset dependent steps
+watch(
+  () => formState.value.sbcType,
+  (newValue, oldValue) => {
+    if (newValue !== oldValue && currentFlowSteps.value) {
+      resetDependentSteps('sbcType', formState.value, currentFlowSteps.value)
     }
   },
 )
