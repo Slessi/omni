@@ -3,8 +3,6 @@
 // Use of this software is governed by the Business Source License
 // included in the LICENSE file.
 
-import { PlatformConfigSpecArch } from '@/api/omni/specs/virtual.pb'
-
 import CloudProviderStep from './Steps/CloudProvider.vue'
 import ConfirmationStep from './Steps/Confirmation.vue'
 import ExtraArgsStep from './Steps/ExtraArgs.vue'
@@ -13,6 +11,12 @@ import SBCTypeStep from './Steps/SBCType.vue'
 import SystemExtensionsStep from './Steps/SystemExtensions.vue'
 import TalosVersionStep from './Steps/TalosVersion.vue'
 import type { FormState } from './InstallationMediaCreate.vue'
+import {
+  applyDefaultArchitecture,
+  resetArchitectureIfInvalid,
+  resetCloudPlatformIfIncompatible,
+  shouldSkipArchitectureStep,
+} from './stepHelpers'
 import type { StepConfig } from './useWizardSteps'
 
 /**
@@ -30,21 +34,9 @@ export const metalFlowSteps: StepConfig[] = [
     isValid: (formState: FormState) => {
       return !!formState.machineArch
     },
-    shouldSkip: (formState: FormState) => {
-      // Skip if only one architecture is available
-      // This would need actual architecture data, but we'll use a simple check for now
-      return false
-    },
-    applyDefaults: (formState: FormState) => {
-      // Default to AMD64 if not set
-      if (!formState.machineArch && formState.hardwareType === 'metal') {
-        formState.machineArch = PlatformConfigSpecArch.AMD64
-      }
-    },
-    onDependencyChange: (formState: FormState) => {
-      // If hardware type changes, reset architecture
-      // This is a simple example - real logic would be more complex
-    },
+    shouldSkip: shouldSkipArchitectureStep,
+    applyDefaults: applyDefaultArchitecture,
+    onDependencyChange: resetArchitectureIfInvalid,
   },
   {
     component: SystemExtensionsStep,
@@ -84,31 +76,16 @@ export const cloudFlowSteps: StepConfig[] = [
     isValid: (formState: FormState) => {
       return !!formState.cloudPlatform
     },
-    onDependencyChange: (formState: FormState) => {
-      // Reset cloud platform if Talos version changes and platform is no longer compatible
-      // This is a placeholder - real implementation would check compatibility
-    },
+    onDependencyChange: resetCloudPlatformIfIncompatible,
   },
   {
     component: MachineArchStep,
     isValid: (formState: FormState) => {
       return !!formState.machineArch
     },
-    shouldSkip: (formState: FormState) => {
-      // Skip if only one architecture is available for the selected cloud platform
-      // This is a placeholder - real implementation would check available architectures
-      return false
-    },
-    applyDefaults: (formState: FormState) => {
-      // Default to AMD64 if not set
-      if (!formState.machineArch && formState.hardwareType === 'cloud') {
-        formState.machineArch = PlatformConfigSpecArch.AMD64
-      }
-    },
-    onDependencyChange: (formState: FormState) => {
-      // Reset architecture if cloud platform changes and architecture is no longer available
-      // This is a placeholder - real implementation would check available architectures
-    },
+    shouldSkip: shouldSkipArchitectureStep,
+    applyDefaults: applyDefaultArchitecture,
+    onDependencyChange: resetArchitectureIfInvalid,
   },
   {
     component: SystemExtensionsStep,
