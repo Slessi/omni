@@ -11,6 +11,61 @@ The framework provides a flexible and extensible way to manage wizard steps with
 - **Forward navigation**: Users can jump to future steps if all intermediate steps are valid
 - **Dependency management**: Steps can reset when their dependencies change
 
+## Example Flow
+
+Here's how the wizard behaves with the new framework:
+
+### Metal Flow Example
+```
+Entry → Select "Bare-metal Machine"
+  ↓
+TalosVersion → Select version + join token
+  ↓ (valid)
+MachineArch → Select AMD64 or ARM64
+  ↓ (valid)
+SystemExtensions → [Optional, auto-valid]
+  ↓
+ExtraArgs → [Optional, auto-valid]
+  ↓
+Confirmation → Review and save
+```
+
+### SBC Flow Example (with auto-skip)
+```
+Entry → Select "Single Board Computer"
+  ↓
+TalosVersion → Select version + join token
+  ↓ (valid)
+SBCType → Select Raspberry Pi
+  ↓ (valid, auto-sets ARM64)
+MachineArch → [SKIPPED - only ARM64 available]
+  ↓
+SystemExtensions → [Optional, auto-valid]
+  ↓
+ExtraArgs → [Optional, auto-valid]
+  ↓
+Confirmation → Review and save
+```
+
+### Navigation Features
+
+**Forward Navigation:**
+- User can click on any future step in the stepper if all previous steps are valid
+- Invalid steps are visually disabled in the stepper
+- "Next" button is disabled when current step is invalid
+
+**Backward Navigation:**
+- User can always navigate to previous steps
+- When navigating backward, future steps remain valid if their state is still correct
+
+**Auto-Skip:**
+- Steps with only one option are automatically skipped
+- Example: SBC flow skips architecture selection (only ARM64 available)
+
+**Dependency Reset:**
+- When a selection changes, dependent future steps are reset if they become invalid
+- Example: Changing cloud platform may reset architecture if it's no longer supported
+
 ## Key Files
 
 ### `useWizardSteps.ts`
