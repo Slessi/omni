@@ -51,13 +51,13 @@ const counts = computed(() => {
     <RadialBar
       title="Machines"
       show-hollow-total
-      :total="counts.totalCount"
+      :total="202"
       :items="[
-        { label: 'Connected', value: counts.connectedCount },
-        { label: 'Not Connected', value: counts.notConnectedCount },
-        { label: 'In Cluster', value: counts.inClusterCount },
-        { label: 'Free Machine', value: counts.freeMachineCount },
-        { label: 'Pending', value: counts.pendingCount },
+        { label: 'Connected', value: 198 },
+        { label: 'Not Connected', value: 4 },
+        { label: 'In Cluster', value: 133 },
+        { label: 'Free Machine', value: 65 },
+        { label: 'Pending', value: 17 },
       ]"
     />
   </Card>

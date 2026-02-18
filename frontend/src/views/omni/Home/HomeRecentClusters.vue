@@ -5,10 +5,13 @@ Use of this software is governed by the Business Source License
 included in the LICENSE file.
 -->
 <script setup lang="ts">
+import { faker } from '@faker-js/faker'
 import pluralize from 'pluralize'
+import { computed } from 'vue'
 
 import { Runtime } from '@/api/common/omni.pb'
-import type { ClusterStatusSpec } from '@/api/omni/specs/omni.pb'
+import type { Resource } from '@/api/grpc'
+import { type ClusterStatusSpec, ClusterStatusSpecPhase } from '@/api/omni/specs/omni.pb'
 import { ClusterStatusType, DefaultNamespace } from '@/api/resources'
 import { itemID } from '@/api/watch'
 import TButton from '@/components/common/Button/TButton.vue'
@@ -17,7 +20,7 @@ import CopyButton from '@/components/common/CopyButton/CopyButton.vue'
 import { useResourceWatch } from '@/methods/useResourceWatch'
 import ClusterStatus from '@/views/omni/Clusters/ClusterStatus.vue'
 
-const { data } = useResourceWatch<ClusterStatusSpec>({
+const { data: data2 } = useResourceWatch<ClusterStatusSpec>({
   resource: {
     namespace: DefaultNamespace,
     type: ClusterStatusType,
@@ -26,6 +29,28 @@ const { data } = useResourceWatch<ClusterStatusSpec>({
   sortByField: 'created',
   sortDescending: true,
 })
+
+const clusterIds = [
+  'dev-eu-central-1',
+  'prod-eu-central-1',
+  'dev-us-west-1',
+  'prod-us-west-1',
+  'test-eu-central-1',
+]
+
+const data = computed(() =>
+  faker.helpers.multiple<Resource<ClusterStatusSpec>>(
+    (_, i) => ({
+      metadata: { id: clusterIds[i] },
+      spec: {
+        machines: { total: faker.number.int({ min: 3, max: 24 }) },
+        phase: faker.helpers.enumValue(ClusterStatusSpecPhase),
+        ready: faker.datatype.boolean(),
+      },
+    }),
+    { count: clusterIds.length },
+  ),
+)
 </script>
 
 <template>

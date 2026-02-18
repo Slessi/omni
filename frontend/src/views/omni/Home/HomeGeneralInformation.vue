@@ -90,10 +90,7 @@ const {
     <TAlert v-if="apiConfigErr" type="error" :title="apiConfigErr" />
 
     <dl class="flex flex-col gap-4">
-      <HomeGeneralInformationCopyable
-        title="Backend Version"
-        :value="sysData?.spec.backend_version"
-      />
+      <HomeGeneralInformationCopyable title="Backend Version" :value="'v1.5.0'" />
 
       <HomeGeneralInformationCopyable
         title="API Endpoint"

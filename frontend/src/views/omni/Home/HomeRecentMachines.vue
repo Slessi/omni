@@ -5,7 +5,11 @@ Use of this software is governed by the Business Source License
 included in the LICENSE file.
 -->
 <script setup lang="ts">
+import { faker } from '@faker-js/faker'
+import { computed } from 'vue'
+
 import { Runtime } from '@/api/common/omni.pb'
+import type { Resource } from '@/api/grpc'
 import type { MachineStatusSpec } from '@/api/omni/specs/omni.pb'
 import { DefaultNamespace, MachineStatusType } from '@/api/resources'
 import { itemID } from '@/api/watch'
@@ -15,7 +19,7 @@ import CopyButton from '@/components/common/CopyButton/CopyButton.vue'
 import TIcon from '@/components/common/Icon/TIcon.vue'
 import { useResourceWatch } from '@/methods/useResourceWatch'
 
-const { data } = useResourceWatch<MachineStatusSpec>({
+const { data: data2 } = useResourceWatch<MachineStatusSpec>({
   resource: {
     namespace: DefaultNamespace,
     type: MachineStatusType,
@@ -24,6 +28,20 @@ const { data } = useResourceWatch<MachineStatusSpec>({
   sortByField: 'created',
   sortDescending: true,
 })
+
+const data = computed(() =>
+  faker.helpers.multiple<Resource<MachineStatusSpec>>(
+    () => ({
+      metadata: { id: faker.string.uuid(), phase: faker.datatype.boolean() ? 'running' : 'other' },
+      spec: {
+        cluster: faker.helpers.slugify(
+          [faker.hacker.verb(), faker.hacker.adjective()].join(' ').toLowerCase(),
+        ),
+      },
+    }),
+    { count: 10 },
+  ),
+)
 </script>
 
 <template>
