@@ -7,7 +7,7 @@ included in the LICENSE file.
 <script setup lang="ts">
 import { getLocalTimeZone, today } from '@internationalized/date'
 import { differenceInDays } from 'date-fns'
-import { type DateRange, type DateValue } from 'reka-ui'
+import type { DateRange } from 'reka-ui'
 import { onUnmounted, ref, shallowRef, watchEffect } from 'vue'
 
 import { b64Decode } from '@/api/fetch.pb'
@@ -28,8 +28,8 @@ const downloading = ref(false)
 const done = ref(false)
 
 const dateRange = shallowRef<DateRange>({
-  start: today(getLocalTimeZone()).subtract({ days: 3 }) as unknown as DateValue,
-  end: today(getLocalTimeZone()).add({ days: 1 }) as unknown as DateValue,
+  start: today(getLocalTimeZone()).subtract({ days: 3 }),
+  end: today(getLocalTimeZone()).add({ days: 1 }),
 })
 
 let abortController: AbortController
@@ -46,8 +46,8 @@ watchEffect(() => {
 
   // Reset the modal when opening
   dateRange.value = {
-    start: today(getLocalTimeZone()).subtract({ days: 3 }) as unknown as DateValue,
-    end: today(getLocalTimeZone()).add({ days: 1 }) as unknown as DateValue,
+    start: today(getLocalTimeZone()).subtract({ days: 3 }),
+    end: today(getLocalTimeZone()).add({ days: 1 }),
   }
 
   downloadedBytes.value = 0
@@ -57,6 +57,8 @@ watchEffect(() => {
 
 async function download() {
   try {
+    if (!dateRange.value.end || !dateRange.value.start) return
+
     downloadedBytes.value = 0
     downloading.value = true
     done.value = false
@@ -68,8 +70,8 @@ async function download() {
 
     await ManagementService.ReadAuditLog(
       {
-        start_time: dateRange.value.start!.toString(),
-        end_time: dateRange.value.end!.toString(),
+        start_time: dateRange.value.start.toString(),
+        end_time: dateRange.value.end.toString(),
       },
       (resp) => {
         const data = resp.audit_log as unknown as string // audit_log is actually not a Uint8Array, but a base64 string

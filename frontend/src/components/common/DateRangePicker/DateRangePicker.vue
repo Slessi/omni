@@ -35,7 +35,7 @@ import { useId } from 'vue'
 import TIcon from '@/components/common/Icon/TIcon.vue'
 
 interface Props extends DateRangePickerRootProps {
-  title: string
+  title?: string
 }
 
 // eslint-disable-next-line vue/define-props-destructuring
@@ -50,7 +50,7 @@ const id = useId()
 
 <template>
   <div class="inline-flex flex-col gap-2">
-    <Label class="text-sm text-naturals-n14" :for="id">{{ title }}</Label>
+    <Label v-if="title" class="text-sm text-naturals-n14" :for="id">{{ title }}</Label>
 
     <DateRangePickerRoot v-bind="forwarded" :id>
       <DateRangePickerField
