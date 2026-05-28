@@ -88,11 +88,15 @@ export function useRegisterAPIInterceptor() {
       await until(keyPair).toBeTruthy()
     }
 
-    const array = new Uint8Array(await signDetached(payload, keyPair.value!))
-    const signature = b64Encode(array, 0, array.length)
-    const fingerprint = publicKeyID.value
+    // Capture before the async boundary — keys.clear() can race and empty these mid-sign.
+    const capturedKeyPair = keyPair.value!
+    const capturedFingerprint = publicKeyID.value
+    const capturedIdentity = identity.value
 
-    return `${SignatureVersionV1} ${identity.value} ${fingerprint} ${signature}`
+    const array = new Uint8Array(await signDetached(payload, capturedKeyPair))
+    const signature = b64Encode(array, 0, array.length)
+
+    return `${SignatureVersionV1} ${capturedIdentity} ${capturedFingerprint} ${signature}`
   }
 }
 
