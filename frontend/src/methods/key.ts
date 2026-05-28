@@ -12,11 +12,11 @@ import { b64Encode } from '@/api/fetch.pb'
 import { AuthService } from '@/api/omni/auth/auth.pb'
 import { AuthFlowQueryParam, FrontendAuthFlow, RedirectQueryParam } from '@/api/resources'
 
-const { data: keyPair, isFinished: keyPairLoaded } = useIDBKeyval<CryptoKeyPair | null>(
-  'keyPair',
-  null,
-  { writeDefaults: false },
-)
+const {
+  data: keyPair,
+  isFinished: keyPairLoaded,
+  set: setKeyPair,
+} = useIDBKeyval<CryptoKeyPair | null>('keyPair', null, { writeDefaults: false })
 
 const keyExpirationTime = useLocalStorage<Date>('keyExpirationTime', new Date(0), {
   serializer: StorageSerializers.date,
@@ -31,12 +31,13 @@ const publicKeyID = useLocalStorage<string>('publicKeyID', '', {
 export function useKeys() {
   return {
     keyPair,
+    setKeyPair,
     keyExpirationTime,
     publicKeyID,
-    clear() {
-      keyPair.value = null
+    async clear() {
       keyExpirationTime.value = new Date(0)
       publicKeyID.value = ''
+      await setKeyPair(null)
     },
     invalidate() {
       keyExpirationTime.value = new Date(0)
@@ -69,7 +70,7 @@ export function useWatchKeyExpiry() {
     onCleanup(() => clearTimeout(keysReloadTimeout))
 
     async function clearKeysAndRedirect() {
-      keys.clear()
+      await keys.clear()
 
       try {
         /**

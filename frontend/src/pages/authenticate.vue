@@ -165,9 +165,9 @@ const generatePublicKey = async (identity: string) => {
     return
   }
 
-  keys.keyPair.value = res.keyPair
   keys.keyExpirationTime.value = res.keyExpirationTime
   keys.publicKeyID.value = res.publicKeyId
+  await keys.setKeyPair(res.keyPair)
 
   identityStorage.identity.value = identity.toLowerCase()
   identityStorage.fullname.value = name.value ?? ''
