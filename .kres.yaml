@@ -61,6 +61,8 @@ spec:
       toplevel: true
     - name: docker-compose-down
       toplevel: true
+    - name: generate-talos-ts
+      toplevel: true
     - name: mkcert-install
       toplevel: true
     - name: mkcert-generate
@@ -146,6 +148,16 @@ spec:
         SYFT_VERSION="$(SYFT_VERSION)"
         WITH_DEBUG="$(WITH_DEBUG)"
         docker compose --file ./hack/compose/docker-compose.yml --file ./hack/compose/docker-compose.override.yml up --build
+---
+kind: custom.Step
+name: generate-talos-ts
+spec:
+  makefile:
+    enabled: true
+    phony: true
+    script:
+      - >-
+        go run ./hack/generate-talos-ts frontend/src/api/talos
 ---
 kind: custom.Step
 name: mkcert-generate
