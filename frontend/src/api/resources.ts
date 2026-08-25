@@ -135,6 +135,7 @@ export const ExtensionsConfigurationType = "ExtensionsConfigurations.omni.sidero
 export const FeaturesConfigID = "features-config";
 export const FeaturesConfigType = "FeaturesConfigs.omni.sidero.dev";
 export const ImageFactoryAuthType = "ImageFactoryAuths.omni.sidero.dev";
+export const ImageFactoryTokenType = "ImageFactoryTokens.omni.sidero.dev";
 export const ImagePullRequestType = "ImagePullRequests.omni.sidero.dev";
 export const ImagePullStatusType = "ImagePullStatuses.omni.sidero.dev";
 export const ImportedClusterSecretsType = "ImportedClusterSecrets.omni.sidero.dev";

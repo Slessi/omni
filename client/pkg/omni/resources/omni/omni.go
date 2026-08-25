@@ -95,6 +95,7 @@ func init() {
 	registry.MustRegisterResource(RedactedClusterMachineConfigType, &RedactedClusterMachineConfig{})
 	registry.MustRegisterResource(SchematicConfigurationType, &SchematicConfiguration{})
 	registry.MustRegisterResource(ImageFactoryAuthType, &ImageFactoryAuth{})
+	registry.MustRegisterResource(ImageFactoryTokenType, &ImageFactoryToken{})
 	registry.MustRegisterResource(TalosConfigType, &TalosConfig{})
 	registry.MustRegisterResource(TalosExtensionsType, &TalosExtensions{})
 	registry.MustRegisterResource(TalosVersionType, &TalosVersion{})

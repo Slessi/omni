@@ -1889,6 +1889,28 @@ message ImageFactoryAuthSpec {
   string password = 2;
 }
 
+// ImageFactoryTokenSpec holds the machine-to-machine access token Omni presents to an image factory.
+//
+// The resource ID is the factory's base URL, stripped of any trailing slash, matching ImageFactoryAuth.
+message ImageFactoryTokenSpec {
+  // AccessToken is the token to send to the factory in the Authorization header.
+  string access_token = 1;
+  // TokenType is the token type the issuer returned, normally "Bearer".
+  string token_type = 2;
+  // IssuedAt is when Omni obtained the token. Together with ExpiresAt it gives the token's
+  // lifetime, which is what the rotation schedule is derived from.
+  google.protobuf.Timestamp issued_at = 3;
+  // ExpiresAt is when the token stops being accepted by the factory.
+  google.protobuf.Timestamp expires_at = 4;
+  // ClientId is the Auth0 client ID the token was issued to.
+  //
+  // It is recorded so that reconfiguring the factory's credentials forces a new token instead of
+  // leaving the one issued to the previous client in place until it expires on its own.
+  string client_id = 5;
+  // Audience is the Auth0 API identifier the token was issued for, recorded for the same reason as ClientId.
+  string audience = 6;
+}
+
 // MachineInstallDiskConfigSpec describes the user's install disk selection for a machine.
 // Exactly one of Disk and DiskSelector is set.
 message MachineInstallDiskConfigSpec {

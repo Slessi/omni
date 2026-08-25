@@ -530,6 +530,7 @@ func filterAccess(ctx context.Context, access state.Access) error {
 		authres.SAMLLabelRuleType,
 		authres.AccessPolicyType,
 		omni.EtcdBackupS3ConfType,
+		omni.ImageFactoryTokenType,
 		infra.ProviderType,
 		omni.InfraMachineBMCConfigType,
 		oidcres.JWTPublicKeyType:
@@ -631,6 +632,7 @@ func filterAccessByType(access state.Access) error {
 		omni.ImagePullRequestType,
 		omni.ImagePullStatusType,
 		omni.ImageFactoryAuthType,
+		omni.ImageFactoryTokenType,
 		omni.InfraProviderCombinedStatusType,
 		omni.KubernetesStatusType,
 		omni.KubernetesUpgradeManifestStatusType,
