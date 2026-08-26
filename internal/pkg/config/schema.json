@@ -236,7 +236,15 @@
             "url": { "x-cli-flag": "primary-factory-url" },
             "pxeURL": { "x-cli-flag": "primary-factory-pxe-url" },
             "username": { "x-cli-flag": "primary-factory-username" },
-            "password": { "x-cli-flag": "primary-factory-password" }
+            "password": { "x-cli-flag": "primary-factory-password" },
+            "auth0": {
+              "properties": {
+                "domain": { "x-cli-flag": "primary-factory-auth0-domain" },
+                "audience": { "x-cli-flag": "primary-factory-auth0-audience" },
+                "clientID": { "x-cli-flag": "primary-factory-client-id" },
+                "clientSecret": { "x-cli-flag": "primary-factory-client-secret" }
+              }
+            }
           }
         },
         "secondary": {
@@ -246,13 +254,24 @@
             "url": { "x-cli-flag": "secondary-factory-url" },
             "pxeURL": { "x-cli-flag": "secondary-factory-pxe-url" },
             "username": { "x-cli-flag": "secondary-factory-username" },
-            "password": { "x-cli-flag": "secondary-factory-password" }
+            "password": { "x-cli-flag": "secondary-factory-password" },
+            "auth0": {
+              "properties": {
+                "domain": { "x-cli-flag": "secondary-factory-auth0-domain" },
+                "audience": { "x-cli-flag": "secondary-factory-auth0-audience" },
+                "clientID": { "x-cli-flag": "secondary-factory-client-id" },
+                "clientSecret": { "x-cli-flag": "secondary-factory-client-secret" }
+              }
+            }
           }
         }
       }
     },
     "Factory": {
       "type": "object",
+      "required": [
+        "auth0"
+      ],
       "dependentRequired": {
         "username": ["password"],
         "password": ["username"]
@@ -272,6 +291,37 @@
         },
         "password": {
           "description": "Password is the password used to authenticate against the Image Factory Enterprise service.",
+          "type": "string"
+        },
+        "auth0": {
+          "description": "Auth0 contains the Auth0 machine-to-machine client configuration used for Image Factory communication.",
+          "$ref": "#/definitions/FactoryAuth0"
+        }
+      }
+    },
+    "FactoryAuth0": {
+      "type": "object",
+      "dependentRequired": {
+        "clientID": ["clientSecret", "domain", "audience"],
+        "clientSecret": ["clientID"],
+        "domain": ["clientID"],
+        "audience": ["clientID"]
+      },
+      "properties": {
+        "domain": {
+          "description": "Domain is the Auth0 tenant which issues the machine-to-machine tokens used for Image Factory communication, e.g. \"mycompany.auth0.com\".",
+          "type": "string"
+        },
+        "audience": {
+          "description": "Audience is the API identifier the Image Factory expects in the machine-to-machine tokens it is presented with, e.g. \"https://image-factory.example.com\".",
+          "type": "string"
+        },
+        "clientID": {
+          "description": "ClientID is used to generate machine-to-machine tokens for Image Factory communication.",
+          "type": "string"
+        },
+        "clientSecret": {
+          "description": "ClientSecret is used to generate machine-to-machine tokens for Image Factory communication.",
           "type": "string"
         }
       }

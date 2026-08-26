@@ -315,6 +315,23 @@ func TestValidateConfig(t *testing.T) {
 			},
 			validateErr: `config value ".registries.factories.secondary.password" or flag "--secondary-factory-password": is required when "username" is set`,
 		},
+
+		{
+			name:   "primary factory auth0 clientID without clientSecret",
+			config: configFull,
+			configModifyFunc: func(cfg *config.Params) {
+				cfg.Registries.Factories.Primary.Auth0.SetClientID("client_id")
+			},
+			validateErr: `config value ".registries.factories.primary.auth0.clientSecret" or flag "--primary-factory-client-secret": is required when "clientID" is set`,
+		},
+		{
+			name:   "secondary factory auth0 clientID without clientSecret",
+			config: configFull,
+			configModifyFunc: func(cfg *config.Params) {
+				cfg.Registries.Factories.Secondary.Auth0.SetClientID("client_id")
+			},
+			validateErr: `config value ".registries.factories.secondary.auth0.clientSecret" or flag "--secondary-factory-client-secret": is required when "clientID" is set`,
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg, err := config.FromBytes(tt.config)

@@ -355,12 +355,20 @@ func defineRegistriesFlags(b *FlagBinder, flagConfig *config.Params) {
 	primary := &flagConfig.Registries.Factories.Primary
 	b.StringVar("registries.factories.primary.url", &primary.Url)
 	b.StringVar("registries.factories.primary.pxeURL", &primary.PxeURL)
+	b.StringVar("registries.factories.primary.auth0.domain", &primary.Auth0.Domain)
+	b.StringVar("registries.factories.primary.auth0.audience", &primary.Auth0.Audience)
+	b.StringVar("registries.factories.primary.auth0.clientID", &primary.Auth0.ClientID)
+	b.StringVar("registries.factories.primary.auth0.clientSecret", &primary.Auth0.ClientSecret)
 	b.StringVar("registries.factories.primary.username", &primary.Username)
 	b.StringVar("registries.factories.primary.password", &primary.Password)
 
 	secondary := &flagConfig.Registries.Factories.Secondary
 	b.StringVar("registries.factories.secondary.url", &secondary.Url)
 	b.StringVar("registries.factories.secondary.pxeURL", &secondary.PxeURL)
+	b.StringVar("registries.factories.secondary.auth0.domain", &secondary.Auth0.Domain)
+	b.StringVar("registries.factories.secondary.auth0.audience", &secondary.Auth0.Audience)
+	b.StringVar("registries.factories.secondary.auth0.clientID", &secondary.Auth0.ClientID)
+	b.StringVar("registries.factories.secondary.auth0.clientSecret", &secondary.Auth0.ClientSecret)
 	b.StringVar("registries.factories.secondary.username", &secondary.Username)
 	b.StringVar("registries.factories.secondary.password", &secondary.Password)
 

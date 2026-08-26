@@ -288,6 +288,10 @@ type Factories struct {
 }
 
 type Factory struct {
+	// Auth0 contains the Auth0 machine-to-machine client configuration used for Image
+	// Factory communication.
+	Auth0 FactoryAuth0 `json:"auth0" yaml:"auth0"`
+
 	// Password is the password used to authenticate against the Image Factory
 	// Enterprise service.
 	Password *string `json:"password,omitempty,omitzero" yaml:"password,omitempty"`
@@ -303,6 +307,25 @@ type Factory struct {
 	// Username is the username used to authenticate against the Image Factory
 	// Enterprise service.
 	Username *string `json:"username,omitempty,omitzero" yaml:"username,omitempty"`
+}
+
+type FactoryAuth0 struct {
+	// Audience is the API identifier the Image Factory expects in the
+	// machine-to-machine tokens it is presented with, e.g.
+	// "https://image-factory.example.com".
+	Audience *string `json:"audience,omitempty,omitzero" yaml:"audience,omitempty"`
+
+	// ClientID is used to generate machine-to-machine tokens for Image Factory
+	// communication.
+	ClientID *string `json:"clientID,omitempty,omitzero" yaml:"clientID,omitempty"`
+
+	// ClientSecret is used to generate machine-to-machine tokens for Image Factory
+	// communication.
+	ClientSecret *string `json:"clientSecret,omitempty,omitzero" yaml:"clientSecret,omitempty"`
+
+	// Domain is the Auth0 tenant which issues the machine-to-machine tokens used for
+	// Image Factory communication, e.g. "mycompany.auth0.com".
+	Domain *string `json:"domain,omitempty,omitzero" yaml:"domain,omitempty"`
 }
 
 type Features struct {
