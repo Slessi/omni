@@ -6,7 +6,7 @@ import { faker } from '@faker-js/faker'
 import { milliseconds } from 'date-fns'
 import { load } from 'js-yaml'
 
-import { expect, test } from '../auth_fixtures'
+import { expect, test } from '../factory_fixtures'
 
 test.describe.configure({ mode: 'parallel' })
 
@@ -35,190 +35,193 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
-// The confirmation step asserts public-factory URLs, the "scan reports need enterprise" banner
-// and disabled checksum buttons - all of which invert against the enterprise factory.
-test(
-  'Create, download, and delete an installation media',
-  { tag: '@community-factory' },
-  async ({ page }, testInfo) => {
-    test.slow()
+// What the confirmation step shows depends on the image factory: the URLs' host, whether scan
+// reports and checksums are offered, and whether PXE boot is. The expectations come from the
+// `factory` project option, so the same flow runs against both the community and the enterprise one.
+test('Create, download, and delete an installation media', async ({ factory, page }, testInfo) => {
+  test.slow()
 
-    const talosVersion = '1.12.0'
+  const talosVersion = '1.13.0'
 
-    await test.step('Entry step', async () => {
-      await page.getByRole('radio', { name: 'Bare-metal Machine' }).click()
-      await expect(page.getByRole('radio', { name: 'Bare-metal Machine' })).toBeChecked()
+  await test.step('Entry step', async () => {
+    await page.getByRole('radio', { name: 'Bare-metal Machine' }).click()
+    await expect(page.getByRole('radio', { name: 'Bare-metal Machine' })).toBeChecked()
 
-      await page.getByRole('link', { name: 'Next' }).click()
-    })
+    await page.getByRole('link', { name: 'Next' }).click()
+  })
 
-    await test.step('Talos version step', async () => {
-      await page.getByRole('combobox', { name: 'Choose Talos Linux Version' }).click()
-      await page.getByRole('option', { name: talosVersion }).click()
-      await expect(page.getByRole('combobox', { name: 'Choose Talos Linux Version' })).toHaveText(
-        talosVersion,
-      )
+  await test.step('Talos version step', async () => {
+    await page.getByRole('combobox', { name: 'Choose Talos Linux Version' }).click()
+    await page.getByRole('option', { name: talosVersion }).click()
+    await expect(page.getByRole('combobox', { name: 'Choose Talos Linux Version' })).toHaveText(
+      talosVersion,
+    )
 
-      await page.getByRole('combobox', { name: 'Join Token' }).click()
-      await page.getByRole('option', { name: 'initial token' }).click()
-      await expect(page.getByRole('combobox', { name: 'Join Token' })).toHaveText('initial token')
+    await page.getByRole('combobox', { name: 'Join Token' }).click()
+    await page.getByRole('option', { name: 'initial token' }).click()
+    await expect(page.getByRole('combobox', { name: 'Join Token' })).toHaveText('initial token')
 
-      await page.getByText('Tunnel Omni management').click()
-      await expect(page.getByRole('checkbox', { name: 'Tunnel Omni management' })).toBeChecked()
+    await page.getByText('Tunnel Omni management').click()
+    await expect(page.getByRole('checkbox', { name: 'Tunnel Omni management' })).toBeChecked()
 
-      await page.getByRole('button', { name: 'new label' }).click()
-      await page.getByRole('textbox').first().fill('foo:bar')
-      await page.getByRole('textbox').first().press('Enter')
-      await expect(page.getByRole('button', { name: 'foo:bar' })).toBeVisible()
+    await page.getByRole('button', { name: 'new label' }).click()
+    await page.getByRole('textbox').first().fill('foo:bar')
+    await page.getByRole('textbox').first().press('Enter')
+    await expect(page.getByRole('button', { name: 'foo:bar' })).toBeVisible()
 
-      await page.getByRole('link', { name: 'Next' }).click()
-    })
+    await page.getByRole('link', { name: 'Next' }).click()
+  })
 
-    await test.step('Architecture step', async () => {
-      await page.getByRole('radio', { name: 'arm64' }).click()
-      await expect(page.getByRole('radio', { name: 'arm64' })).toBeChecked()
+  await test.step('Architecture step', async () => {
+    await page.getByRole('radio', { name: 'arm64' }).click()
+    await expect(page.getByRole('radio', { name: 'arm64' })).toBeChecked()
 
-      await page.getByRole('checkbox', { name: 'SecureBoot' }).click()
-      await expect(page.getByRole('checkbox', { name: 'SecureBoot' })).toBeChecked()
+    await page.getByRole('checkbox', { name: 'SecureBoot' }).click()
+    await expect(page.getByRole('checkbox', { name: 'SecureBoot' })).toBeChecked()
 
-      await page.getByRole('link', { name: 'Next' }).click()
-    })
+    await page.getByRole('link', { name: 'Next' }).click()
+  })
 
-    await test.step('System extensions step', async () => {
-      await page.getByPlaceholder('Search').fill('hello')
-      await page.getByText('siderolabs/hello-world-service').click()
-      await expect(
-        page.getByRole('checkbox', { name: 'siderolabs/hello-world-service' }),
-      ).toBeChecked()
+  await test.step('System extensions step', async () => {
+    await page.getByPlaceholder('Search').fill('hello')
+    await page.getByText('siderolabs/hello-world-service').click()
+    await expect(
+      page.getByRole('checkbox', { name: 'siderolabs/hello-world-service' }),
+    ).toBeChecked()
 
-      await page.getByRole('link', { name: 'Next' }).click()
-    })
+    await page.getByRole('link', { name: 'Next' }).click()
+  })
 
-    await test.step('Extra args step', async () => {
-      await page.getByRole('radio', { name: 'Auto' }).click()
-      await page.locator('.flex.max-h-full').first().click()
+  await test.step('Extra args step', async () => {
+    await page.getByRole('radio', { name: 'Auto' }).click()
+    await page.locator('.flex.max-h-full').first().click()
 
-      await page
-        .getByRole('textbox', { name: 'Extra kernel command line' })
-        .fill(`-console console=tty0`)
+    await page
+      .getByRole('textbox', { name: 'Extra kernel command line' })
+      .fill(`-console console=tty0`)
 
-      await page.getByRole('link', { name: 'Next' }).click()
-    })
+    await page.getByRole('link', { name: 'Next' }).click()
+  })
 
-    const savedPresetName = `e2e-media-${faker.string.alphanumeric(8)}`
+  const savedPresetName = `e2e-media-${faker.string.alphanumeric(8)}`
 
-    let schematicId: string
+  let schematicId: string
 
-    await test.step('Confirmation step', async () => {
-      await expect(
-        page.getByText(
-          'Vulnerability scan reports are only available through the Talos Linux Image Factory Enterprise.',
-        ),
-      ).toBeVisible()
+  await test.step('Confirmation step', async () => {
+    await expect(
+      page.getByText(
+        'Vulnerability scan reports are only available through the Talos Linux Image Factory Enterprise.',
+      ),
+    ).toBeVisible({ visible: !factory.isEnterprise })
 
-      await page.getByRole('button', { name: 'Copy schematic ID' }).click()
+    await page.getByRole('button', { name: 'Copy schematic ID' }).click()
 
-      await expect
-        .poll(async () => {
-          schematicId = await page.evaluate(() => navigator.clipboard.readText())
-          return schematicId
-        }, 'Expect schematic ID to be valid')
-        .toMatch(/[a-zA-Z0-9]{64}/)
+    await expect
+      .poll(async () => {
+        schematicId = await page.evaluate(() => navigator.clipboard.readText())
+        return schematicId
+      }, 'Expect schematic ID to be valid')
+      .toMatch(/[a-zA-Z0-9]{64}/)
 
-      // Clearing clipboard before next poll
-      await page.evaluate(() => navigator.clipboard.writeText(''))
-      await page.getByRole('button', { name: 'Copy schematic YAML' }).click()
+    // Clearing clipboard before next poll
+    await page.evaluate(() => navigator.clipboard.writeText(''))
+    await page.getByRole('button', { name: 'Copy schematic YAML' }).click()
 
-      await expect
-        .poll(async () => {
-          const schematicYml = await page.evaluate(() => navigator.clipboard.readText())
-          if (!schematicYml) return
-          const parsedSchematicYml = load(schematicYml)
+    await expect
+      .poll(async () => {
+        const schematicYml = await page.evaluate(() => navigator.clipboard.readText())
+        if (!schematicYml) return
+        const parsedSchematicYml = load(schematicYml)
 
-          await testInfo.attach('schematic.yaml', {
-            body: schematicYml,
-            contentType: 'application/yaml',
-          })
-
-          return parsedSchematicYml
-        }, 'Expect YAML to match expected shape')
-        .toEqual({
-          customization: {
-            extraKernelArgs: [
-              expect.stringContaining('siderolink.api=grpc://'),
-              expect.stringContaining('talos.events.sink='),
-              expect.stringContaining('talos.logging.kernel='),
-              '-console',
-              'console=tty0',
-            ],
-            meta: [{ key: 12, value: expect.any(String) }],
-            systemExtensions: {
-              officialExtensions: ['siderolabs/hello-world-service'],
-            },
-          },
+        await testInfo.attach('schematic.yaml', {
+          body: schematicYml,
+          contentType: 'application/yaml',
         })
 
-      await expect(
-        page.getByText(
-          `https://factory.talos.dev/image/${schematicId}/${talosVersion}/metal-arm64-secureboot.iso`,
-        ),
-      ).toBeVisible()
+        return parsedSchematicYml
+      }, 'Expect YAML to match expected shape')
+      .toEqual({
+        customization: {
+          extraKernelArgs: [
+            expect.stringContaining('siderolink.api=grpc://'),
+            expect.stringContaining('talos.events.sink='),
+            expect.stringContaining('talos.logging.kernel='),
+            '-console',
+            'console=tty0',
+          ],
+          meta: [{ key: 12, value: expect.any(String) }],
+          systemExtensions: {
+            officialExtensions: ['siderolabs/hello-world-service'],
+          },
+        },
+      })
 
-      await expect(
-        page.getByText(
-          `https://factory.talos.dev/image/${schematicId}/${talosVersion}/metal-arm64-secureboot.raw.zst`,
-        ),
-      ).toBeVisible()
+    await expect(
+      page.getByText(
+        `https://${factory.imageHost}/image/${schematicId}/${talosVersion}/metal-arm64-secureboot.iso`,
+      ),
+    ).toBeVisible()
 
-      await expect(
-        page.getByText(
-          `https://pxe.factory.talos.dev/pxe/${schematicId}/${talosVersion}/metal-arm64-secureboot`,
-        ),
-      ).toBeVisible()
+    await expect(
+      page.getByText(
+        `https://${factory.imageHost}/image/${schematicId}/${talosVersion}/metal-arm64-secureboot.raw.zst`,
+      ),
+    ).toBeVisible()
 
-      await expect(page.getByRole('button', { name: 'sha256' }).first()).toBeDisabled()
-      await expect(page.getByRole('button', { name: 'sha512' }).first()).toBeDisabled()
+    // An enterprise factory offers no PXE boot, so the URL is absent rather than pointing elsewhere.
+    await expect(
+      page.getByText(
+        `https://${factory.pxeHost}/pxe/${schematicId}/${talosVersion}/metal-arm64-secureboot`,
+      ),
+    ).toBeVisible({ visible: !factory.isEnterprise })
 
-      await page.getByRole('button', { name: 'Save' }).click()
-      await page.getByRole('textbox', { name: 'Name:' }).fill(savedPresetName)
-      await page.getByRole('textbox', { name: 'Name:' }).click()
-      await page.getByLabel('Save preset').getByRole('button', { name: 'Save' }).click()
-      await page.getByRole('link', { name: 'Finished' }).click()
+    // Checksums are an enterprise feature: the buttons are shown either way, and locked otherwise.
+    await expect(page.getByRole('button', { name: 'sha256' }).first()).toBeEnabled({
+      enabled: factory.isEnterprise,
+    })
+    await expect(page.getByRole('button', { name: 'sha512' }).first()).toBeEnabled({
+      enabled: factory.isEnterprise,
     })
 
-    const presetRow = page.getByRole('row', { name: savedPresetName })
+    await page.getByRole('button', { name: 'Save' }).click()
+    await page.getByRole('textbox', { name: 'Name:' }).fill(savedPresetName)
+    await page.getByRole('textbox', { name: 'Name:' }).click()
+    await page.getByLabel('Save preset').getByRole('button', { name: 'Save' }).click()
+    await page.getByRole('link', { name: 'Finished' }).click()
+  })
 
-    await test.step('Download the image', async () => {
-      await presetRow.getByLabel('download').click()
+  const presetRow = page.getByRole('row', { name: savedPresetName })
 
-      const isoRow = page.getByRole('row', { name: 'SecureBoot ISO' })
-      await isoRow.getByLabel('copy link').click()
+  await test.step('Download the image', async () => {
+    await presetRow.getByLabel('download').click()
 
-      await expect
-        .poll(async () => await page.evaluate(() => navigator.clipboard.readText()))
-        .toBe(
-          `https://factory.talos.dev/image/${schematicId}/${talosVersion}/metal-arm64-secureboot.iso?filename=omni-default-${talosVersion}-metal-arm64-secureboot.iso`,
-        )
+    const isoRow = page.getByRole('row', { name: 'SecureBoot ISO' })
+    await isoRow.getByLabel('copy link').click()
 
-      // Note: Skipping testing of download as it is flaky and doesn't test anything about the frontend
+    await expect
+      .poll(async () => await page.evaluate(() => navigator.clipboard.readText()))
+      .toBe(
+        `https://${factory.imageHost}/image/${schematicId}/${talosVersion}/metal-arm64-secureboot.iso?filename=omni-default-${talosVersion}-metal-arm64-secureboot.iso`,
+      )
 
-      await page.getByRole('button', { name: 'Close', exact: true }).click()
-    })
+    // Note: Skipping testing of download as it is flaky and doesn't test anything about the frontend
 
-    await test.step('Delete the image', async () => {
-      await presetRow.getByLabel('delete').click()
+    await page.getByRole('button', { name: 'Close', exact: true }).click()
+  })
 
-      await expect(
-        page.getByText(`Are you sure you want to delete preset "${savedPresetName}"?`),
-      ).toBeVisible()
+  await test.step('Delete the image', async () => {
+    await presetRow.getByLabel('delete').click()
 
-      await page.getByRole('button', { name: 'Confirm' }).click()
+    await expect(
+      page.getByText(`Are you sure you want to delete preset "${savedPresetName}"?`),
+    ).toBeVisible()
 
-      await expect(page.getByText(`Deleted preset ${savedPresetName}`)).toBeVisible()
-      await expect(presetRow).toBeHidden()
-    })
-  },
-)
+    await page.getByRole('button', { name: 'Confirm' }).click()
+
+    await expect(page.getByText(`Deleted preset ${savedPresetName}`)).toBeVisible()
+    await expect(presetRow).toBeHidden()
+  })
+})
 
 test('Reset wizard state', async ({ page }) => {
   await test.step('Entry step', async () => {

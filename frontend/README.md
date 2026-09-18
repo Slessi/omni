@@ -80,6 +80,13 @@ BASE_URL=https://my-instance.omni.localhost/
 - `AUTH_*` should be a username/password that already exists in your auth0 configuration
 - `BASE_URL` should point to the omni instance under test
 
+When the instance under test uses an image factory other than the public one, also set the two variables the CI suites configure Omni with, so the installation media tests expect the right URLs and features:
+
+```sh
+OMNI_IMAGE_FACTORY_BASE_URL=https://factory-enterprise.staging.talos.dev
+WITH_IMAGE_FACTORY_ENTERPRISE=true
+```
+
 Note that `omnictl` related tests may fail if the config downloaded from omni has a different user or URL than the ones configured your environment variables. Make sure these are correctly in sync with in your [docker-compose.override.yml](../hack/compose/docker-compose.override.yml).
 
 Tests can then be run with the `test:e2e` script.

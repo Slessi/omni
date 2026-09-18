@@ -106,6 +106,8 @@ docker run --rm \
   -e AUTH_PASSWORD="$AUTH_PASSWORD" \
   -e AUTH_USERNAME="$AUTH_USERNAME" \
   -e BASE_URL="$BASE_URL" \
+  -e OMNI_IMAGE_FACTORY_BASE_URL="${OMNI_IMAGE_FACTORY_BASE_URL}" \
+  -e WITH_IMAGE_FACTORY_ENTERPRISE="${WITH_IMAGE_FACTORY_ENTERPRISE}" \
   -e PROJECT="${PLAYWRIGHT_PROJECT}" \
   -v "${TEST_OUTPUTS_DIR}/e2e/playwright-report:/tmp/test/playwright-report" \
   --add-host="${OMNI_HOST}:host-gateway" \
