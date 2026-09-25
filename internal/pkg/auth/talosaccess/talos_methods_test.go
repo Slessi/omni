@@ -3,7 +3,7 @@
 // Use of this software is governed by the Business Source License
 // included in the LICENSE file.
 
-package router_test
+package talosaccess_test
 
 import (
 	"fmt"
@@ -20,7 +20,7 @@ import (
 	"github.com/siderolabs/talos/pkg/machinery/api/time"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/siderolabs/omni/internal/backend/grpc/router"
+	"github.com/siderolabs/omni/internal/pkg/auth/talosaccess"
 )
 
 // operatorMethods are the Talos API methods Omni forwards with os:operator at most, the rest is in adminMethodSet.
@@ -114,8 +114,8 @@ func TestTalosMethodsDecided(t *testing.T) {
 	}
 
 	decidedMethods := slices.Concat(
-		slices.Collect(maps.Keys(router.AdminMethodSet)),
-		slices.Collect(maps.Keys(router.AdminMethodSet1_12)),
+		slices.Collect(maps.Keys(talosaccess.AdminMethodSet)),
+		slices.Collect(maps.Keys(talosaccess.AdminMethodSet1_12)),
 		operatorMethods,
 	)
 

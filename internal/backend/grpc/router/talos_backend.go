@@ -13,66 +13,17 @@ import (
 	"github.com/cosi-project/runtime/pkg/state"
 	"github.com/siderolabs/gen/xslices"
 	"github.com/siderolabs/go-api-signature/pkg/message"
-	"github.com/siderolabs/talos/pkg/machinery/api/machine"
-	"github.com/siderolabs/talos/pkg/machinery/api/storage"
 	"github.com/siderolabs/talos/pkg/machinery/constants"
-	talosrole "github.com/siderolabs/talos/pkg/machinery/role"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 
-	"github.com/siderolabs/omni/client/pkg/access/role"
 	"github.com/siderolabs/omni/internal/backend/dns"
 	"github.com/siderolabs/omni/internal/pkg/auth"
 	"github.com/siderolabs/omni/internal/pkg/auth/accesspolicy"
+	"github.com/siderolabs/omni/internal/pkg/auth/talosaccess"
 	"github.com/siderolabs/omni/internal/pkg/ctxstore"
 	"github.com/siderolabs/omni/internal/pkg/grpcutil"
 )
-
-// operatorMethodSet is the set of methods that are allowed to be called by the minimum role of os:operator.
-var operatorMethodSet = xslices.ToSet([]string{
-	machine.MachineService_EtcdAlarmDisarm_FullMethodName,
-	machine.MachineService_EtcdAlarmList_FullMethodName,
-	machine.MachineService_EtcdDefragment_FullMethodName,
-	machine.MachineService_EtcdStatus_FullMethodName,
-	machine.MachineService_PacketCapture_FullMethodName,
-	machine.MachineService_Reboot_FullMethodName,
-	machine.MachineService_Restart_FullMethodName,
-	machine.MachineService_ServiceRestart_FullMethodName,
-	machine.MachineService_ServiceStart_FullMethodName,
-	machine.MachineService_ServiceStop_FullMethodName,
-	machine.MachineService_Shutdown_FullMethodName,
-})
-
-// adminMethodSet is the set of methods that are allowed to be called by the minimum role of os:admin.
-var adminMethodSet = xslices.ToSet([]string{
-	storage.StorageService_BlockDeviceWipe_FullMethodName,
-
-	machine.LVMService_LogicalVolumeRemove_FullMethodName,
-	machine.LVMService_PhysicalVolumeRemove_FullMethodName,
-	machine.LVMService_VolumeGroupRemove_FullMethodName,
-
-	machine.MDService_Destroy_FullMethodName,
-
-	machine.MachineService_EtcdDowngradeCancel_FullMethodName,
-	machine.MachineService_EtcdDowngradeEnable_FullMethodName,
-	machine.MachineService_EtcdDowngradeValidate_FullMethodName,
-	machine.MachineService_EtcdForfeitLeadership_FullMethodName,
-	machine.MachineService_MetaWrite_FullMethodName,
-	machine.MachineService_MetaDelete_FullMethodName,
-
-	machine.DebugService_ContainerRun_FullMethodName,
-
-	machine.ImageService_Remove_FullMethodName,
-})
-
-// adminMethodSet1_12 is the set of methods that are allowed to be called by the minimum role of os:admin for Talos versions >= 1.12.0.
-var adminMethodSet1_12 = xslices.ToSet([]string{
-	// read/copy APIs were not considered safe for older Talos versions, as the STATE partition has always been mounted
-	machine.MachineService_Copy_FullMethodName,
-	machine.MachineService_Read_FullMethodName,
-})
 
 // TalosBackend implements a backend (proxying directly to a single Talos node over SideroLink).
 type TalosBackend struct {
@@ -163,23 +114,9 @@ func (backend *TalosBackend) GetConnection(ctx context.Context, fullMethodName s
 		}
 	}
 
-	hasModifyAccess := false
-
-	_, authErr := auth.Check(ctx, auth.WithRole(role.Operator))
-	// insecure access mode should only be possible for the operator role users
-	if authErr != nil && backend.clusterID == "" {
-		return ctx, nil, status.Error(codes.PermissionDenied, "permission denied")
-	}
-
-	if authErr == nil {
-		hasModifyAccess = true
-	}
-
-	if !hasModifyAccess {
-		// at least read access is required
-		if _, err = auth.CheckGRPC(ctx, auth.WithRole(role.Reader)); err != nil {
-			return ctx, nil, err
-		}
+	hasModifyAccess, err := talosaccess.Check(ctx, backend.clusterID)
+	if err != nil {
+		return ctx, nil, err
 	}
 
 	md = md.Copy()
@@ -209,43 +146,9 @@ func (backend *TalosBackend) GetConnection(ctx context.Context, fullMethodName s
 }
 
 func (backend *TalosBackend) setRoleHeaders(ctx context.Context, md metadata.MD, fullMethodName string, nodes []dns.Info, hasModifyAccess bool) {
-	if !hasModifyAccess {
-		setHeaderData(ctx, md, constants.APIAuthzRoleMetadataKey, talosrole.MakeSet(talosrole.Reader).Strings()...)
+	roles := talosaccess.Roles(fullMethodName, backend.minTalosVersion(nodes), hasModifyAccess)
 
-		return
-	}
-
-	minTalosVersion := backend.minTalosVersion(nodes)
-
-	// methods that should have admin access
-	if _, ok := adminMethodSet[fullMethodName]; ok {
-		setHeaderData(ctx, md, constants.APIAuthzRoleMetadataKey, talosrole.MakeSet(talosrole.Admin).Strings()...)
-
-		return
-	}
-
-	// methods that should have admin access for Talos >= 1.12.0
-	if _, ok := adminMethodSet1_12[fullMethodName]; ok {
-		if minTalosVersion != nil && minTalosVersion.GTE(semver.MustParse("1.12.0")) {
-			setHeaderData(ctx, md, constants.APIAuthzRoleMetadataKey, talosrole.MakeSet(talosrole.Admin).Strings()...)
-
-			return
-		}
-	}
-
-	// min Talos version is >= 1.4.0, we can use Operator role
-	if minTalosVersion != nil && minTalosVersion.GTE(semver.MustParse("1.4.0")) {
-		setHeaderData(ctx, md, constants.APIAuthzRoleMetadataKey, talosrole.MakeSet(talosrole.Operator).Strings()...)
-
-		return
-	}
-
-	// min Talos version is unknown or < 1.4.0, fallback to backwards-compatibility logic
-	if _, ok := operatorMethodSet[fullMethodName]; ok {
-		setHeaderData(ctx, md, constants.APIAuthzRoleMetadataKey, talosrole.MakeSet(talosrole.Admin).Strings()...)
-	} else {
-		setHeaderData(ctx, md, constants.APIAuthzRoleMetadataKey, talosrole.MakeSet(talosrole.Reader).Strings()...)
-	}
+	setHeaderData(ctx, md, constants.APIAuthzRoleMetadataKey, roles.Strings()...)
 }
 
 func (backend *TalosBackend) minTalosVersion(nodes []dns.Info) *semver.Version {

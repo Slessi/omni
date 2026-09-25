@@ -8,6 +8,7 @@ package talos
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"runtime"
@@ -23,6 +24,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/siderolabs/talos/pkg/machinery/client"
 	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
+	talosrole "github.com/siderolabs/talos/pkg/machinery/role"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -30,6 +32,7 @@ import (
 	"github.com/siderolabs/omni/client/pkg/constants"
 	"github.com/siderolabs/omni/client/pkg/omni/resources"
 	"github.com/siderolabs/omni/client/pkg/omni/resources/omni"
+	"github.com/siderolabs/omni/internal/pkg/certs"
 )
 
 // ClientNotReadyError is returned when building the client fails because cluster endpoints list is empty
@@ -298,8 +301,12 @@ func newClientFactory(omniState state.State, logger *zap.Logger, openClients *pp
 	}
 }
 
-// connectionOptions returns client configuration generated from the TalosConfig resource.
-func (factory *ClientFactory) connectionOptions(ctx context.Context, id string, endpoints []string) ([]client.OptionFunc, error) {
+// connectionOptions returns the client configuration for the cluster.
+//
+// A regular client authenticates with the `os:admin` certificate of the TalosConfig resource. An impersonator client
+// authenticates with an `os:impersonator` certificate issued from the cluster secrets instead, so that Talos honors the
+// roles its callers pass in the gRPC metadata.
+func (factory *ClientFactory) connectionOptions(ctx context.Context, id string, endpoints []string, impersonate bool) ([]client.OptionFunc, error) {
 	if len(endpoints) > 0 {
 		opts := GetSocketOptions(endpoints[0])
 
@@ -308,25 +315,29 @@ func (factory *ClientFactory) connectionOptions(ctx context.Context, id string, 
 		}
 	}
 
-	res, err := safe.StateGet[*omni.TalosConfig](ctx, factory.omniState, resource.NewMetadata(resources.DefaultNamespace, omni.TalosConfigType, id, resource.VersionUndefined))
-	if err != nil {
-		if state.IsNotFoundError(err) {
-			return nil, NewClientNotReadyError(err)
-		}
+	var (
+		ca, crt, key string
+		err          error
+	)
 
-		return nil, err
+	if impersonate {
+		ca, crt, key, err = factory.impersonatorCredentials(ctx, id)
+	} else {
+		ca, crt, key, err = factory.adminCredentials(ctx, id)
 	}
 
-	spec := res.TypedSpec().Value
+	if err != nil {
+		return nil, err
+	}
 
 	config := &clientconfig.Config{
 		Context: id,
 		Contexts: map[string]*clientconfig.Context{
 			id: {
 				Endpoints: endpoints,
-				CA:        spec.Ca,
-				Crt:       spec.Crt,
-				Key:       spec.Key,
+				CA:        ca,
+				Crt:       crt,
+				Key:       key,
 			},
 		},
 	}
@@ -341,11 +352,63 @@ func (factory *ClientFactory) connectionOptions(ctx context.Context, id string, 
 	}, nil
 }
 
+// adminCredentials returns the base64 encoded `os:admin` credentials of the cluster from its TalosConfig resource.
+func (factory *ClientFactory) adminCredentials(ctx context.Context, clusterID string) (ca, crt, key string, err error) {
+	res, err := safe.StateGet[*omni.TalosConfig](ctx, factory.omniState, resource.NewMetadata(resources.DefaultNamespace, omni.TalosConfigType, clusterID, resource.VersionUndefined))
+	if err != nil {
+		if state.IsNotFoundError(err) {
+			return "", "", "", NewClientNotReadyError(err)
+		}
+
+		return "", "", "", err
+	}
+
+	spec := res.TypedSpec().Value
+
+	return spec.Ca, spec.Crt, spec.Key, nil
+}
+
+// impersonatorCredentials issues base64 encoded `os:impersonator` credentials for the cluster from its secrets.
+func (factory *ClientFactory) impersonatorCredentials(ctx context.Context, clusterID string) (ca, crt, key string, err error) {
+	secrets, err := safe.StateGet[*omni.ClusterSecrets](ctx, factory.omniState, omni.NewClusterSecrets(clusterID).Metadata())
+	if err != nil {
+		if state.IsNotFoundError(err) {
+			return "", "", "", NewClientNotReadyError(err)
+		}
+
+		return "", "", "", err
+	}
+
+	clientCert, caPEM, err := certs.TalosAPIClientCertificateFromSecrets(secrets, constants.CertificateValidityTime, talosrole.MakeSet(talosrole.Impersonator))
+	if err != nil {
+		return "", "", "", err
+	}
+
+	return base64.StdEncoding.EncodeToString(caPEM),
+		base64.StdEncoding.EncodeToString(clientCert.Crt),
+		base64.StdEncoding.EncodeToString(clientCert.Key),
+		nil
+}
+
 // GetForCluster constructs a client from resource configuration.
+//
+// The client authenticates as `os:admin`, it must only be used for Omni's own calls.
 //
 // The returned client must be closed by the caller.
 func (factory *ClientFactory) GetForCluster(ctx context.Context, clusterID string) (*Client, error) {
-	cacheKey := buildCacheKey(clusterID, "")
+	return factory.getForCluster(ctx, clusterID, false)
+}
+
+// GetImpersonatorForCluster constructs a client which authenticates as `os:impersonator`, so that the Talos roles the
+// caller acts with must be set in the gRPC metadata of each request. See talosaccess.Roles.
+//
+// The returned client must be closed by the caller.
+func (factory *ClientFactory) GetImpersonatorForCluster(ctx context.Context, clusterID string) (*Client, error) {
+	return factory.getForCluster(ctx, clusterID, true)
+}
+
+func (factory *ClientFactory) getForCluster(ctx context.Context, clusterID string, impersonate bool) (*Client, error) {
+	cacheKey := withCredentials(buildCacheKey(clusterID, ""), impersonate)
 
 	factory.mu.Lock()
 	defer factory.mu.Unlock()
@@ -354,7 +417,7 @@ func (factory *ClientFactory) GetForCluster(ctx context.Context, clusterID strin
 		return cli, nil
 	}
 
-	c, err := factory.buildForCluster(ctx, clusterID)
+	c, err := factory.buildForCluster(ctx, clusterID, impersonate)
 	if err != nil {
 		return nil, err
 	}
@@ -565,7 +628,7 @@ func (factory *ClientFactory) releaseForCluster(clusterID string) {
 	})
 }
 
-func (factory *ClientFactory) buildForCluster(ctx context.Context, clusterID string) (*client.Client, error) {
+func (factory *ClientFactory) buildForCluster(ctx context.Context, clusterID string, impersonate bool) (*client.Client, error) {
 	clusterEndpoint, err := safe.StateGet[*omni.ClusterEndpoint](
 		ctx, factory.omniState,
 		omni.NewClusterEndpoint(clusterID).Metadata(),
@@ -583,7 +646,7 @@ func (factory *ClientFactory) buildForCluster(ctx context.Context, clusterID str
 		return nil, NewClientNotReadyError(errors.New("no management addresses on cluster endpoint"))
 	}
 
-	options, err := factory.connectionOptions(ctx, clusterID, endpoints)
+	options, err := factory.connectionOptions(ctx, clusterID, endpoints, impersonate)
 	if err != nil {
 		return nil, err
 	}
@@ -595,9 +658,21 @@ func (factory *ClientFactory) buildForCluster(ctx context.Context, clusterID str
 // It returns a maintenance (insecure) or a regular (secure) client depending on whether the machine is currently in
 // maintenance mode or not, as reported by its MachineStatus.
 //
+// The secure client authenticates as `os:admin`, it must only be used for Omni's own calls.
+//
 // The returned client must be closed by the caller.
 func (factory *ClientFactory) GetForMachine(ctx context.Context, machineID string) (*Client, error) {
-	return factory.getForMachine(ctx, machineID, false)
+	return factory.getForMachine(ctx, machineID, false, false)
+}
+
+// GetImpersonatorForMachine is like GetForMachine, but the secure client authenticates as `os:impersonator`, so that
+// the Talos roles the caller acts with must be set in the gRPC metadata of each request. See talosaccess.Roles.
+//
+// The maintenance client is the same for both, as the maintenance API does not authenticate its clients.
+//
+// The returned client must be closed by the caller.
+func (factory *ClientFactory) GetImpersonatorForMachine(ctx context.Context, machineID string) (*Client, error) {
+	return factory.getForMachine(ctx, machineID, false, true)
 }
 
 // GetMaintenance constructs a Talos client connected directly to a specific node's SideroLink address over the insecure
@@ -610,16 +685,16 @@ func (factory *ClientFactory) GetForMachine(ctx context.Context, machineID strin
 //
 // The returned client must be closed by the caller.
 func (factory *ClientFactory) GetMaintenance(ctx context.Context, machineID string) (*Client, error) {
-	return factory.getForMachine(ctx, machineID, true)
+	return factory.getForMachine(ctx, machineID, true, false)
 }
 
-func (factory *ClientFactory) getForMachine(ctx context.Context, machineID string, maintenanceOnly bool) (*Client, error) {
+func (factory *ClientFactory) getForMachine(ctx context.Context, machineID string, maintenanceOnly, impersonate bool) (*Client, error) {
 	_, clusterID, err := factory.resolveMachine(ctx, machineID, maintenanceOnly)
 	if err != nil {
 		return nil, err
 	}
 
-	cacheKey := buildCacheKey(clusterID, machineID)
+	cacheKey := withCredentials(buildCacheKey(clusterID, machineID), impersonate && clusterID != "")
 
 	factory.mu.Lock()
 	defer factory.mu.Unlock()
@@ -634,13 +709,13 @@ func (factory *ClientFactory) getForMachine(ctx context.Context, machineID strin
 		return nil, err
 	}
 
-	cacheKey = buildCacheKey(clusterID, machineID)
+	cacheKey = withCredentials(buildCacheKey(clusterID, machineID), impersonate && clusterID != "")
 
 	if cli, ok := factory.leaseLocked(cacheKey); ok {
 		return cli, nil
 	}
 
-	c, err := factory.buildForMachine(ctx, clusterID, machineStatus)
+	c, err := factory.buildForMachine(ctx, clusterID, machineStatus, impersonate)
 	if err != nil {
 		return nil, err
 	}
@@ -698,7 +773,21 @@ func buildCacheKey(clusterID, machineID string) string {
 	return clusterID + "/" + machineID
 }
 
-func (factory *ClientFactory) buildForMachine(ctx context.Context, clusterID string, machineStatus *omni.MachineStatus) (*client.Client, error) {
+// impersonatorKeySuffix marks the cache keys of the secure clients which authenticate as `os:impersonator`.
+//
+// It is a suffix so that the keys keep the cluster prefix every eviction of the cluster matches on.
+const impersonatorKeySuffix = "@impersonator"
+
+// withCredentials returns the cache key of the client with the given credentials for the key built by buildCacheKey.
+func withCredentials(cacheKey string, impersonate bool) string {
+	if impersonate {
+		return cacheKey + impersonatorKeySuffix
+	}
+
+	return cacheKey
+}
+
+func (factory *ClientFactory) buildForMachine(ctx context.Context, clusterID string, machineStatus *omni.MachineStatus, impersonate bool) (*client.Client, error) {
 	machineID := machineStatus.Metadata().ID()
 
 	managementAddress := machineStatus.TypedSpec().Value.ManagementAddress
@@ -707,12 +796,16 @@ func (factory *ClientFactory) buildForMachine(ctx context.Context, clusterID str
 	}
 
 	if clusterID != "" {
-		options, err := factory.connectionOptions(ctx, clusterID, []string{managementAddress})
+		options, err := factory.connectionOptions(ctx, clusterID, []string{managementAddress}, impersonate)
 		if err != nil {
 			return nil, err
 		}
 
 		return client.New(ctx, options...)
+	}
+
+	if opts := GetSocketOptions(managementAddress); opts != nil {
+		return client.New(ctx, opts...)
 	}
 
 	// Maintenance mode: encrypted but no certificate verification.
@@ -728,23 +821,11 @@ func (factory *ClientFactory) buildForMachine(ctx context.Context, clusterID str
 
 func (factory *ClientFactory) releaseForMachine(clusterID, machineID string) {
 	cacheKey := buildCacheKey(clusterID, machineID)
+	impersonatorKey := withCredentials(cacheKey, true)
 
-	factory.mu.Lock()
-
-	e := factory.entries[cacheKey]
-	if e != nil {
-		factory.dropLocked(e)
-	}
-
-	factory.mu.Unlock()
-
-	if e == nil {
-		return
-	}
-
-	factory.logger.Debug("evicted Talos client from cache", zap.String("key", cacheKey))
-
-	factory.release(e)
+	factory.evict(func(e *entry) bool {
+		return e.key == cacheKey || e.key == impersonatorKey
+	})
 }
 
 // WaitForCacheStart blocks until StartCacheManager has registered all its watches, or the context is done.
@@ -909,6 +990,10 @@ var _ prometheus.Collector = &ClientFactory{}
 
 // cacheKeyType returns the client type label for a cache key.
 func cacheKeyType(key string) string {
+	if base, ok := strings.CutSuffix(key, impersonatorKeySuffix); ok {
+		return cacheKeyType(base) + "-impersonator"
+	}
+
 	if strings.HasPrefix(key, "machine-") {
 		return "maintenance"
 	}

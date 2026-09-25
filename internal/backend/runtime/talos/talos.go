@@ -10,8 +10,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/blang/semver/v4"
+	"github.com/cosi-project/runtime/api/v1alpha1"
 	cosiresource "github.com/cosi-project/runtime/pkg/resource"
+	"github.com/cosi-project/runtime/pkg/resource/meta"
+	"github.com/cosi-project/runtime/pkg/safe"
+	"github.com/cosi-project/runtime/pkg/state"
 	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 	"github.com/siderolabs/talos/pkg/machinery/constants"
 	talosrole "github.com/siderolabs/talos/pkg/machinery/role"
@@ -22,10 +28,13 @@ import (
 
 	"github.com/siderolabs/omni/client/api/common"
 	"github.com/siderolabs/omni/client/pkg/cosi/labels"
+	"github.com/siderolabs/omni/client/pkg/omni/resources/omni"
 	pkgruntime "github.com/siderolabs/omni/client/pkg/runtime"
 	"github.com/siderolabs/omni/internal/backend/logging"
 	"github.com/siderolabs/omni/internal/backend/runtime"
 	"github.com/siderolabs/omni/internal/backend/runtime/cosi"
+	"github.com/siderolabs/omni/internal/pkg/auth/accesspolicy"
+	"github.com/siderolabs/omni/internal/pkg/auth/talosaccess"
 )
 
 // Name talos runtime string id.
@@ -72,9 +81,9 @@ func (r *Runtime) watch(ctx context.Context, events chan<- runtime.WatchResponse
 
 	switch len(opts.Machines) {
 	case 0:
-		c, err = r.GetClientForCluster(ctx, opts.Context)
+		ctx, c, err = r.callerClient(ctx, opts.Context, "", opts.Resource, v1alpha1.State_Watch_FullMethodName)
 	case 1:
-		c, err = r.GetClientForMachine(ctx, opts.Machines[0])
+		ctx, c, err = r.callerClient(ctx, "", opts.Machines[0], opts.Resource, v1alpha1.State_Watch_FullMethodName)
 	default:
 		return errors.New("multiple machines are not supported for Watch")
 	}
@@ -84,8 +93,6 @@ func (r *Runtime) watch(ctx context.Context, events chan<- runtime.WatchResponse
 	}
 
 	defer c.Close() //nolint:errcheck
-
-	ctx = metadata.AppendToOutgoingContext(ctx, constants.APIAuthzRoleMetadataKey, string(talosrole.Reader))
 
 	var queries []cosiresource.LabelQuery
 
@@ -122,9 +129,9 @@ func (r *Runtime) Get(ctx context.Context, setters ...runtime.QueryOption) (any,
 
 	switch len(opts.Machines) {
 	case 0:
-		c, err = r.GetClientForCluster(ctx, opts.Context)
+		ctx, c, err = r.callerClient(ctx, opts.Context, "", opts.Resource, v1alpha1.State_Get_FullMethodName)
 	case 1:
-		c, err = r.GetClientForMachine(ctx, opts.Machines[0])
+		ctx, c, err = r.callerClient(ctx, "", opts.Machines[0], opts.Resource, v1alpha1.State_Get_FullMethodName)
 	default:
 		return nil, errors.New("multiple machines are not supported for Get")
 	}
@@ -134,8 +141,6 @@ func (r *Runtime) Get(ctx context.Context, setters ...runtime.QueryOption) (any,
 	}
 
 	defer c.Close() //nolint:errcheck
-
-	ctx = metadata.AppendToOutgoingContext(ctx, constants.APIAuthzRoleMetadataKey, string(talosrole.Reader))
 
 	res, err := c.COSI.Get(ctx, cosiresource.NewMetadata(opts.Namespace, opts.Resource, opts.Name, cosiresource.VersionUndefined))
 	if err != nil {
@@ -178,9 +183,9 @@ func (r *Runtime) list(ctx context.Context, machine string, opts *runtime.QueryO
 	)
 
 	if machine == "" {
-		c, err = r.GetClientForCluster(ctx, opts.Context)
+		ctx, c, err = r.callerClient(ctx, opts.Context, "", opts.Resource, v1alpha1.State_List_FullMethodName)
 	} else {
-		c, err = r.GetClientForMachine(ctx, machine)
+		ctx, c, err = r.callerClient(ctx, "", machine, opts.Resource, v1alpha1.State_List_FullMethodName)
 	}
 
 	if err != nil {
@@ -189,9 +194,7 @@ func (r *Runtime) list(ctx context.Context, machine string, opts *runtime.QueryO
 
 	defer c.Close() //nolint:errcheck
 
-	machineCtx := metadata.AppendToOutgoingContext(ctx, constants.APIAuthzRoleMetadataKey, string(talosrole.Reader))
-
-	items, err := c.COSI.List(machineCtx, cosiresource.NewMetadata(opts.Namespace, opts.Resource, "", cosiresource.VersionUndefined))
+	items, err := c.COSI.List(ctx, cosiresource.NewMetadata(opts.Namespace, opts.Resource, "", cosiresource.VersionUndefined))
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +265,125 @@ func (r *Runtime) GetTalosconfigRaw(context *common.Context, identity string) ([
 	return talosconfig.Bytes()
 }
 
+// callerClient returns a client for a request made on behalf of the caller in the context: either to the cluster, or
+// directly to the machine when machineID is set.
+//
+// It checks that the caller may access the target, and returns the context carrying the Talos roles the caller acts
+// with, mapped from its Omni role for the cluster the same way as for the Talos API requests Omni proxies.
+//
+// The returned client must be closed by the caller.
+func (r *Runtime) callerClient(ctx context.Context, clusterID, machineID, resourceType, fullMethodName string) (context.Context, *Client, error) {
+	var talosVersion string
+
+	if machineID != "" {
+		machineStatus, err := safe.StateGet[*omni.MachineStatus](ctx, r.clientFactory.omniState, omni.NewMachineStatus(machineID).Metadata())
+		if err != nil {
+			return nil, nil, err
+		}
+
+		// authorize against the cluster the machine belongs to, never one given by the caller. It is empty for
+		// a machine outside of any cluster, which only the callers with modify access may reach.
+		clusterID = machineStatus.TypedSpec().Value.Cluster
+		talosVersion = machineStatus.TypedSpec().Value.TalosVersion
+	} else {
+		if clusterID == "" {
+			return nil, nil, status.Error(codes.InvalidArgument, "either a cluster or a machine is required")
+		}
+
+		cluster, err := safe.StateGet[*omni.Cluster](ctx, r.clientFactory.omniState, omni.NewCluster(clusterID).Metadata())
+		if err != nil && !state.IsNotFoundError(err) {
+			return nil, nil, err
+		}
+
+		if cluster != nil {
+			talosVersion = cluster.TypedSpec().Value.TalosVersion
+		}
+	}
+
+	ctx, err := accesspolicy.ApplyClusterAccessPolicy(ctx, clusterID, r.clientFactory.omniState)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	hasModifyAccess, err := talosaccess.Check(ctx, clusterID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var minTalosVersion *semver.Version
+
+	if v, parseErr := semver.ParseTolerant(talosVersion); parseErr == nil {
+		minTalosVersion = &v
+	}
+
+	var c *Client
+
+	if machineID != "" {
+		c, err = r.clientFactory.GetImpersonatorForMachine(ctx, machineID)
+	} else {
+		c, err = r.clientFactory.GetImpersonatorForCluster(ctx, clusterID)
+	}
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// the factory reads the machine status again, the machine might have moved to another cluster since it was authorized
+	if c.ClusterID() != "" && c.ClusterID() != clusterID {
+		c.Close() //nolint:errcheck
+
+		return nil, nil, status.Errorf(codes.Unavailable, "machine %q changed its cluster", machineID)
+	}
+
+	if c, err = r.checkConnected(ctx, c); err != nil {
+		return nil, nil, err
+	}
+
+	roles := talosaccess.Roles(fullMethodName, minTalosVersion, hasModifyAccess)
+
+	// A machine in maintenance mode is reached over its maintenance API, which grants every SideroLink peer, Omni
+	// included, all the roles. Talos cannot enforce the caller's roles there, so enforce its sensitivity rule here.
+	if c.ClusterID() == "" {
+		if err = checkSensitivity(ctx, c, resourceType, roles); err != nil {
+			c.Close() //nolint:errcheck
+
+			return nil, nil, err
+		}
+	}
+
+	roleStrings := roles.Strings()
+	kv := make([]string, 0, 2*len(roleStrings))
+
+	for _, talosRole := range roleStrings {
+		kv = append(kv, constants.APIAuthzRoleMetadataKey, talosRole)
+	}
+
+	return metadata.AppendToOutgoingContext(ctx, kv...), c, nil
+}
+
+// checkSensitivity denies the access to a sensitive resource type unless the roles include os:admin, as Talos does.
+func checkSensitivity(ctx context.Context, c *Client, resourceType string, roles talosrole.Set) error {
+	rd, err := safe.StateGet[*meta.ResourceDefinition](ctx, c.COSI,
+		cosiresource.NewMetadata(meta.NamespaceName, meta.ResourceDefinitionType, strings.ToLower(resourceType), cosiresource.VersionUndefined),
+	)
+	if err != nil {
+		if state.IsNotFoundError(err) {
+			return status.Errorf(codes.PermissionDenied, "resource type %q is not supported", resourceType)
+		}
+
+		return err
+	}
+
+	if rd.TypedSpec().Sensitivity == meta.Sensitive && !roles.Includes(talosrole.Admin) {
+		return status.Errorf(codes.PermissionDenied, "access to the sensitive resource type %q is not permitted", resourceType)
+	}
+
+	return nil
+}
+
 // GetClientForCluster returns talos client for the cluster name.
+//
+// The client authenticates as `os:admin`, it must only be used for Omni's own calls, never on behalf of a caller.
 //
 // The returned client must be closed by the caller.
 func (r *Runtime) GetClientForCluster(ctx context.Context, clusterName string) (*Client, error) {
@@ -277,6 +398,8 @@ func (r *Runtime) GetClientForCluster(ctx context.Context, clusterName string) (
 // GetClientForMachine returns a Talos client connected directly to the given machine's SideroLink endpoint.
 //
 // Cluster membership is determined automatically from the machine's state.
+//
+// The client authenticates as `os:admin`, it must only be used for Omni's own calls, never on behalf of a caller.
 //
 // The returned client must be closed by the caller.
 func (r *Runtime) GetClientForMachine(ctx context.Context, machineID string) (*Client, error) {

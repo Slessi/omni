@@ -6,6 +6,7 @@
 package talos
 
 import (
+	"context"
 	"runtime/pprof"
 	"time"
 
@@ -77,4 +78,11 @@ func (factory *ClientFactory) LeakedClients() int {
 // can look at its own clients only.
 func NewClientFactoryWithProfile(omniState state.State, logger *zap.Logger, openClients *pprof.Profile) *ClientFactory {
 	return newClientFactory(omniState, logger, openClients)
+}
+
+// ImpersonatorCertificate exposes the base64 encoded certificate of impersonatorCredentials to external tests.
+func (factory *ClientFactory) ImpersonatorCertificate(ctx context.Context, clusterID string) (string, error) {
+	_, crt, _, err := factory.impersonatorCredentials(ctx, clusterID)
+
+	return crt, err
 }
