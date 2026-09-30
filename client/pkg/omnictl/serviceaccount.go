@@ -196,6 +196,27 @@ var (
 			})
 		},
 	}
+
+	serviceAccountRevokeKeyCmd = &cobra.Command{
+		Use:   "revoke-key <name> <public-key-id>",
+		Short: "Revoke a single public key of a service account",
+		Long:  "Revoke a single public key of a service account. The key IDs can be listed with 'omnictl serviceaccount list'.",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			name, publicKeyID := args[0], args[1]
+
+			return access.WithClient(func(ctx context.Context, client *client.Client, _ access.ServerInfo) error {
+				err := client.Management().RevokeServiceAccountKey(ctx, name, publicKeyID)
+				if err != nil {
+					return fmt.Errorf("failed to revoke service account key: %w", err)
+				}
+
+				safeout.Printf("revoked key %s of service account: %s\n", publicKeyID, name)
+
+				return nil
+			})
+		},
+	}
 )
 
 func generateServiceAccountPGPKey(name string) (*pgp.Key, error) {
@@ -213,6 +234,7 @@ func init() {
 	serviceAccountCmd.AddCommand(serviceAccountListCmd)
 	serviceAccountCmd.AddCommand(serviceAccountDestroyCmd)
 	serviceAccountCmd.AddCommand(serviceAccountRenewCmd)
+	serviceAccountCmd.AddCommand(serviceAccountRevokeKeyCmd)
 
 	roleFlag := "role"
 	useUserRoleFlag := "use-user-role"
