@@ -4,7 +4,47 @@
 // included in the LICENSE file.
 import { describe, expect, test } from 'vitest'
 
-import { isVolumePrepared } from './volumeStatus'
+import type { Resource } from '@/api/grpc'
+import type { VolumeStatusSpec } from '@/api/talos/block.pb'
+
+import { getFailedVolumes, getVolumePhaseAppearance, isVolumePrepared } from './volumeStatus'
+
+const status = (id: string, spec: VolumeStatusSpec): Resource<VolumeStatusSpec> => ({
+  metadata: { id },
+  spec,
+})
+
+describe('getVolumePhaseAppearance', () => {
+  test.each([
+    ['ready', 'Ready', 'success'],
+    ['failed', 'Failed', 'danger'],
+    ['waiting', 'Waiting', 'info'],
+    ['missing', 'Missing', 'info'],
+  ])('%s', (phase, label, tone) => {
+    expect(getVolumePhaseAppearance(phase)).toMatchObject({ label, tone })
+  })
+
+  test('falls back for an unknown phase', () => {
+    expect(getVolumePhaseAppearance('new-phase')).toEqual({
+      label: 'new-phase',
+      tone: 'info',
+      glyph: 'unknown',
+    })
+    expect(getVolumePhaseAppearance()).toMatchObject({ label: 'Unknown' })
+  })
+})
+
+describe('getFailedVolumes', () => {
+  test('returns only failed volumes, sorted by ID', () => {
+    const statuses = [
+      status('u-logs', { phase: 'failed' }),
+      status('EPHEMERAL', { phase: 'ready' }),
+      status('u-data', { phase: 'failed' }),
+    ]
+
+    expect(getFailedVolumes(statuses).map((s) => s.metadata.id)).toEqual(['u-data', 'u-logs'])
+  })
+})
 
 describe('isVolumePrepared', () => {
   test.each([
